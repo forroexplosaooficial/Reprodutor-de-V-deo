@@ -1,1156 +1,669 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="dark">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rádio Explosão - Reprodutor de Vídeo</title>
-    <!-- Tailwind CSS -->
+    <title>Reprodutor de Vídeos Ao Vivo</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Fonte Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #09090b;
-            color: #f4f4f5;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
 
-        /* Barra de progresso e volume customizadas */
-        input[type="range"] {
-            -webkit-appearance: none;
-            appearance: none;
-            background: transparent;
-            cursor: pointer;
+        /* Proporção exata ~16:8.5 baseada na imagem de referência com bordas arredondadas */
+        .player-aspect-box {
+            aspect-ratio: 16 / 8.5;
+            width: 100%;
+            max-width: 1000px;
+            max-height: 92vh;
+            border-radius: 24px;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45);
+            transition: border-radius 0.3s ease;
         }
 
-        input[type="range"]::-webkit-slider-runnable-track {
-            height: 5px;
-            border-radius: 999px;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            height: 14px;
-            width: 14px;
-            border-radius: 50%;
-            background: #ef4444;
-            margin-top: -4.5px;
-            transition: transform 0.15s ease;
-        }
-
-        input[type="range"]:hover::-webkit-slider-thumb {
-            transform: scale(1.25);
-        }
-
-        /* Animação de feedback ao teclar */
-        /* Faixa escura de alto contraste para o título em destaque estilo thumbnail profissional */
-        .card-highlight-header {
-            background: linear-gradient(180deg, rgba(0, 0, 0, 0.96) 0%, rgba(9, 9, 11, 0.85) 65%, rgba(0, 0, 0, 0) 100%);
-        }
-
-        /* Sombra nítida no título em destaque dos cards */
-        .card-title-shadow {
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 1), 0 1px 3px rgba(0, 0, 0, 0.95);
-        }
-
-        /* Halo luminoso do emblema central de Play */
-        .play-emblem-glow {
-            box-shadow: 0 0 18px rgba(239, 68, 68, 0.7), 0 6px 16px rgba(0, 0, 0, 0.85);
-        }
-
-        .group\/card:hover .play-emblem-glow {
-            box-shadow: 0 0 28px rgba(239, 68, 68, 0.95), 0 0 10px rgba(255, 255, 255, 0.65);
-        }
-
-        /* Estilo quando o container está em Tela Cheia */
-        #playerContainer:fullscreen,
-        #playerContainer:-webkit-full-screen {
+        /* Ajustes quando o container principal estiver em Tela Cheia */
+        .player-aspect-box:fullscreen {
+            max-width: 100vw !important;
+            max-height: 100vh !important;
             width: 100vw !important;
             height: 100vh !important;
-            max-width: none !important;
             border-radius: 0 !important;
-            border: none !important;
+        }
+        .player-aspect-box:-webkit-full-screen {
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            border-radius: 0 !important;
+        }
+
+        /* Estilização discreta para a barra de rolagem horizontal dos cards */
+        .cards-scroller::-webkit-scrollbar {
+            height: 5px;
+        }
+        .cards-scroller::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 9999px;
+        }
+        .cards-scroller::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 9999px;
+        }
+        .cards-scroller::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.45);
+        }
+
+        /* Efeito de brilho ambiente quente centralizado idêntico à imagem de referência */
+        .ambient-backdrop {
+            background: radial-gradient(circle at 50% 42%, rgba(196, 128, 56, 0.52) 0%, rgba(112, 66, 28, 0.32) 34%, rgba(10, 16, 24, 0.96) 72%, #070b10 100%);
+        }
+
+        /* Transição suave ao ocultar/exibir a interface sobreposta */
+        .hud-layer {
+            transition: opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1), transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .hud-hidden-top {
+            opacity: 0 !important;
+            transform: translateY(-14px);
+            pointer-events: none !important;
+        }
+        .hud-hidden-bottom {
+            opacity: 0 !important;
+            transform: translateY(18px);
+            pointer-events: none !important;
+        }
+        .hud-hidden-fade {
+            opacity: 0 !important;
+            pointer-events: none !important;
         }
     </style>
 </head>
-<body class="min-h-screen w-full flex items-center justify-center bg-zinc-950 p-2 sm:p-4 overflow-hidden select-none">
+<body class="w-screen h-screen flex items-center justify-center p-3 sm:p-6 select-none">
 
-    <!-- REPRODUTOR PRINCIPAL CENTRALIZADO -->
-    <div id="playerContainer" tabindex="0" aria-label="Reprodutor de vídeo Rádio Explosão" class="player-wrapper relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 group focus:outline-none focus:ring-2 focus:ring-red-500/50">
+    <!-- Container Principal Único: Reprodutor de Vídeos -->
+    <div id="mainPlayerContainer" class="player-aspect-box relative overflow-hidden bg-[#070b10] flex flex-col justify-between">
         
-        <!-- 1. Vídeo Nativo HTML5 (MP4 / WebM / OGG) -->
-        <video 
-            id="nativeVideo" 
-            class="w-full h-full object-contain bg-black cursor-pointer"
-            playsinline
-            preload="metadata"
-        ></video>
-
-        <!-- 2. Suporte YouTube IFrame API (Caso algum card aponte para YouTube) -->
-        <div id="youtubeWrapper" class="hidden w-full h-full relative bg-black">
-            <div id="youtubePlayer" class="w-full h-full pointer-events-none"></div>
-            <div id="ytClickLayer" class="absolute inset-0 cursor-pointer z-10"></div>
+        <!-- Camada de Fundo Desfocado (Fiel à imagem de referência) -->
+        <div id="ambientFallback" class="ambient-backdrop absolute inset-0 z-0 transition-opacity duration-500">
+            <div class="absolute inset-0 backdrop-blur-3xl opacity-90"></div>
         </div>
 
-        <!-- Feedback Visual Central de Atalhos de Teclado -->
-        <div id="keyFeedbackOverlay" class="pointer-events-none hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/75 backdrop-blur-sm flex items-center justify-center text-white text-2xl sm:text-3xl border border-white/15">
-            <i id="keyFeedbackIcon" class="fa-solid fa-play"></i>
+        <!-- Camada de Vídeo Nativo (MP4 / WebM) -->
+        <video id="nativeVideoPlayer" class="hidden absolute inset-0 w-full h-full object-cover z-0" playsinline controls></video>
+
+        <!-- Camada de Vídeo YouTube (Iframe) -->
+        <div id="youtubeContainer" class="hidden absolute inset-0 w-full h-full z-0 bg-black">
+            <iframe id="youtubeIframe" class="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
         </div>
 
-        <!-- Botão Central Grande de Play -->
-        <button 
-            id="bigCenterPlayBtn" 
-            aria-label="Reproduzir vídeo"
-            class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-600/95 hover:bg-red-500 hover:scale-110 active:scale-95 text-white flex items-center justify-center shadow-2xl shadow-black/80 transition-all duration-200 border-2 border-white/25"
-        >
-            <i class="fa-solid fa-play text-2xl sm:text-3xl ml-1"></i>
-        </button>
+        <!-- Camada Transparente de Interceptação (Ativa apenas quando a interface está oculta: restaura tudo ao tocar/clicar sem pausar o vídeo) -->
+        <div id="restoreUiOverlay" class="hidden absolute inset-0 z-30 cursor-pointer bg-transparent" title="Toque ou clique para mostrar os controles"></div>
 
-        <!-- CAMADA SOBREPOSTA: 4 CARDS COM NOME EM DESTAQUE + EMBLEMA DE PLAY + URL SALVA -->
-        <div id="overlayCardsLayer" class="absolute inset-0 z-20 pointer-events-none">
-            
-            <!-- CARD 1: Superior Esquerdo -->
-            <div 
-                id="cardBox0"
-                onclick="handleCardClick(event, 0)"
-                onkeydown="handleCardKeydown(event, 0)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute top-3 left-3 sm:top-5 sm:left-5 w-[33%] max-w-[265px] min-w-[130px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg0" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 1" class="w-full h-full object-cover brightness-85 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Título em Destaque Estilo Thumbnail -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 pt-2 pb-4 sm:px-3.5 sm:pt-2.5 sm:pb-5 z-10">
-                    <div class="flex items-start gap-1.5">
-                        <span class="w-1.5 h-4 sm:h-5 rounded-full bg-red-500 shrink-0 mt-0.5 shadow-[0_0_8px_rgba(239,68,68,0.9)]"></span>
-                        <p id="cardTitle0" class="text-white font-black uppercase tracking-wide text-xs sm:text-sm md:text-base leading-tight line-clamp-2 card-title-shadow">
-                            ADICIONAR VÍDEO 1
-                        </p>
-                    </div>
-                </div>
+        <!-- Gradiente sutil superior e inferior para garantir leitura dos controles e cards sobrepostos -->
+        <div id="topGradient" class="hud-layer pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/65 via-black/25 to-transparent z-10"></div>
+        <div id="bottomGradient" class="hud-layer pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10"></div>
 
-                <!-- Emblema Central Luminoso de Play de Reproduzir -->
-                <div id="cardPlayEmblem0" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[38%] z-10 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full bg-red-600/95 group-hover/card:bg-red-500 group-hover/card:scale-110 play-emblem-glow text-white flex items-center justify-center border-2 border-white transition-all duration-200">
-                    <svg class="w-5 h-5 sm:w-6 sm:h-6 ml-0.5 fill-current drop-shadow" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
+        <!-- Barra Superior Interna: Selo 'AO VIVO' à esquerda e Ações (Adicionar, Ocultar, PiP, Tela Cheia) à direita -->
+        <div id="topHudBar" class="hud-layer relative z-20 flex items-center justify-between gap-2 px-4 pt-4 sm:px-7 sm:pt-6">
+            <!-- Selo Vermelho AO VIVO idêntico à referência -->
+            <div class="inline-flex items-center gap-2 bg-[#e11d2b] text-white font-extrabold tracking-wider text-xs sm:text-sm px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-2xl shadow-lg flex-shrink-0">
+                <span class="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-white animate-pulse"></span>
+                <span>AO VIVO</span>
+            </div>
+
+            <!-- Título do Vídeo Atual (Discreto no centro em telas maiores) -->
+            <div id="nowPlayingBadge" class="hidden lg:flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/45 backdrop-blur-md border border-white/10 text-white/90 text-xs font-medium max-w-xs truncate">
+                <span class="text-white/50">Reproduzindo:</span>
+                <span id="nowPlayingTitle" class="truncate font-semibold text-white">Sinal Principal • Ambiente</span>
+            </div>
+
+            <!-- Grupo de Controles Superiores Direitos -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <!-- Botão Adicionar Novo Card -->
+                <button id="openAddModalBtn" type="button" title="Adicionar novo card de vídeo" class="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs sm:text-sm font-semibold px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
-                </div>
+                    <span class="hidden sm:inline">Adicionar Card</span>
+                </button>
 
-                <!-- Selo "Tocando agora" -->
-                <div id="cardPlayingBadge0" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
+                <!-- 1) Botão Ocultar Interface (Limpar Tela / Olho Fechado) -->
+                <button id="hideUiBtn" type="button" title="Ocultar interface (Modo Cinema)" aria-label="Ocultar interface" class="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <!-- Ícone Olho Cortado (Ocultar) -->
+                    <svg class="w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                </button>
 
-                <!-- Selo de Confirmação "Link salvo!" -->
-                <div id="cardSavedBadge0" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
+                <!-- 2) Botão Picture-in-Picture (PiP) -->
+                <button id="pipBtn" type="button" title="Picture-in-Picture (Janela Flutuante)" aria-label="Picture-in-Picture" class="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="14" rx="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <rect x="11" y="10" width="8" height="6" rx="1.2" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
 
-                <!-- Botão Adicionar / Editar URL e Título -->
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 0)"
-                    title="Adicionar ou editar URL e título deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-lg border border-white/40 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel0">URL / Título</span>
+                <!-- 3) Botão Tela Cheia (Fullscreen) -->
+                <button id="fullscreenBtn" type="button" title="Tela Cheia" aria-label="Tela Cheia" class="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <!-- Ícone Expandir Tela Cheia -->
+                    <svg id="fullscreenExpandIcon" class="w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                    <!-- Ícone Sair da Tela Cheia -->
+                    <svg id="fullscreenCompressIcon" class="hidden w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
                 </button>
             </div>
-
-            <!-- CARD 2: Inferior Esquerdo -->
-            <div 
-                id="cardBox1"
-                onclick="handleCardClick(event, 1)"
-                onkeydown="handleCardKeydown(event, 1)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute bottom-14 left-3 sm:bottom-16 sm:left-5 w-[33%] max-w-[265px] min-w-[130px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg1" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 2" class="w-full h-full object-cover brightness-85 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Título em Destaque Estilo Thumbnail -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 pt-2 pb-4 sm:px-3.5 sm:pt-2.5 sm:pb-5 z-10">
-                    <div class="flex items-start gap-1.5">
-                        <span class="w-1.5 h-4 sm:h-5 rounded-full bg-red-500 shrink-0 mt-0.5 shadow-[0_0_8px_rgba(239,68,68,0.9)]"></span>
-                        <p id="cardTitle1" class="text-white font-black uppercase tracking-wide text-xs sm:text-sm md:text-base leading-tight line-clamp-2 card-title-shadow">
-                            ADICIONAR VÍDEO 2
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Emblema Central Luminoso de Play de Reproduzir -->
-                <div id="cardPlayEmblem1" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[38%] z-10 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full bg-red-600/95 group-hover/card:bg-red-500 group-hover/card:scale-110 play-emblem-glow text-white flex items-center justify-center border-2 border-white transition-all duration-200">
-                    <svg class="w-5 h-5 sm:w-6 sm:h-6 ml-0.5 fill-current drop-shadow" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
-                </div>
-
-                <div id="cardPlayingBadge1" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
-
-                <div id="cardSavedBadge1" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
-
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 1)"
-                    title="Adicionar ou editar URL e título deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-lg border border-white/40 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel1">URL / Título</span>
-                </button>
-            </div>
-
-            <!-- CARD 3: Superior Direito -->
-            <div 
-                id="cardBox2"
-                onclick="handleCardClick(event, 2)"
-                onkeydown="handleCardKeydown(event, 2)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute top-3 right-3 sm:top-5 sm:right-5 w-[33%] max-w-[265px] min-w-[130px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg2" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 3" class="w-full h-full object-cover brightness-85 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Título em Destaque Estilo Thumbnail -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 pt-2 pb-4 sm:px-3.5 sm:pt-2.5 sm:pb-5 z-10">
-                    <div class="flex items-start gap-1.5">
-                        <span class="w-1.5 h-4 sm:h-5 rounded-full bg-red-500 shrink-0 mt-0.5 shadow-[0_0_8px_rgba(239,68,68,0.9)]"></span>
-                        <p id="cardTitle2" class="text-white font-black uppercase tracking-wide text-xs sm:text-sm md:text-base leading-tight line-clamp-2 card-title-shadow">
-                            ADICIONAR VÍDEO 3
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Emblema Central Luminoso de Play de Reproduzir -->
-                <div id="cardPlayEmblem2" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[38%] z-10 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full bg-red-600/95 group-hover/card:bg-red-500 group-hover/card:scale-110 play-emblem-glow text-white flex items-center justify-center border-2 border-white transition-all duration-200">
-                    <svg class="w-5 h-5 sm:w-6 sm:h-6 ml-0.5 fill-current drop-shadow" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
-                </div>
-
-                <div id="cardPlayingBadge2" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
-
-                <div id="cardSavedBadge2" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
-
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 2)"
-                    title="Adicionar ou editar URL e título deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-lg border border-white/40 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel2">URL / Título</span>
-                </button>
-            </div>
-
-            <!-- CARD 4: Inferior Direito -->
-            <div 
-                id="cardBox3"
-                onclick="handleCardClick(event, 3)"
-                onkeydown="handleCardKeydown(event, 3)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute bottom-14 right-3 sm:bottom-16 sm:right-5 w-[33%] max-w-[265px] min-w-[130px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg3" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 4" class="w-full h-full object-cover brightness-85 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Título em Destaque Estilo Thumbnail -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 pt-2 pb-4 sm:px-3.5 sm:pt-2.5 sm:pb-5 z-10">
-                    <div class="flex items-start gap-1.5">
-                        <span class="w-1.5 h-4 sm:h-5 rounded-full bg-red-500 shrink-0 mt-0.5 shadow-[0_0_8px_rgba(239,68,68,0.9)]"></span>
-                        <p id="cardTitle3" class="text-white font-black uppercase tracking-wide text-xs sm:text-sm md:text-base leading-tight line-clamp-2 card-title-shadow">
-                            ADICIONAR VÍDEO 4
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Emblema Central Luminoso de Play de Reproduzir -->
-                <div id="cardPlayEmblem3" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[38%] z-10 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full bg-red-600/95 group-hover/card:bg-red-500 group-hover/card:scale-110 play-emblem-glow text-white flex items-center justify-center border-2 border-white transition-all duration-200">
-                    <svg class="w-5 h-5 sm:w-6 sm:h-6 ml-0.5 fill-current drop-shadow" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
-                </div>
-
-                <div id="cardPlayingBadge3" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
-
-                <div id="cardSavedBadge3" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
-
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 3)"
-                    title="Adicionar ou editar URL e título deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-lg border border-white/40 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel3">URL / Título</span>
-                </button>
-            </div>
-
-            <!-- CARD 2: Inferior Esquerdo -->
-            <div 
-                id="cardBox1"
-                onclick="handleCardClick(event, 1)"
-                onkeydown="handleCardKeydown(event, 1)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute bottom-14 left-3 sm:bottom-16 sm:left-5 w-[32%] max-w-[255px] min-w-[125px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg1" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 2" class="w-full h-full object-cover brightness-90 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Nome em Destaque -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 py-2 sm:px-3.5 sm:py-2.5 z-10">
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-1.5 h-3.5 sm:h-4 rounded-full bg-red-500 shrink-0 shadow"></span>
-                        <p id="cardTitle1" class="text-white font-black uppercase tracking-wide text-[11px] sm:text-xs md:text-sm leading-tight truncate card-title-shadow">
-                            VÍDEO 2
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Emblema Central de Play de Reproduzir -->
-                <div id="cardPlayEmblem1" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42%] z-10 w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full bg-red-600/90 group-hover/card:bg-red-500 group-hover/card:scale-110 group-hover/card:shadow-[0_0_20px_rgba(239,68,68,0.85)] text-white flex items-center justify-center shadow-xl border-2 border-white/90 transition-all duration-200">
-                    <svg class="w-4 h-4 sm:w-5 sm:h-5 ml-0.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
-                </div>
-
-                <div id="cardPlayingBadge1" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
-
-                <div id="cardSavedBadge1" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
-
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 1)"
-                    title="Adicionar ou editar URL e nome deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2 py-1 rounded-lg border border-white/35 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel1" class="hidden sm:inline">URL</span>
-                </button>
-            </div>
-
-            <!-- CARD 3: Superior Direito -->
-            <div 
-                id="cardBox2"
-                onclick="handleCardClick(event, 2)"
-                onkeydown="handleCardKeydown(event, 2)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute top-3 right-3 sm:top-5 sm:right-5 w-[32%] max-w-[255px] min-w-[125px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg2" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 3" class="w-full h-full object-cover brightness-90 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Nome em Destaque -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 py-2 sm:px-3.5 sm:py-2.5 z-10">
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-1.5 h-3.5 sm:h-4 rounded-full bg-red-500 shrink-0 shadow"></span>
-                        <p id="cardTitle2" class="text-white font-black uppercase tracking-wide text-[11px] sm:text-xs md:text-sm leading-tight truncate card-title-shadow">
-                            VÍDEO 3
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Emblema Central de Play de Reproduzir -->
-                <div id="cardPlayEmblem2" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42%] z-10 w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full bg-red-600/90 group-hover/card:bg-red-500 group-hover/card:scale-110 group-hover/card:shadow-[0_0_20px_rgba(239,68,68,0.85)] text-white flex items-center justify-center shadow-xl border-2 border-white/90 transition-all duration-200">
-                    <svg class="w-4 h-4 sm:w-5 sm:h-5 ml-0.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
-                </div>
-
-                <div id="cardPlayingBadge2" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
-
-                <div id="cardSavedBadge2" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
-
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 2)"
-                    title="Adicionar ou editar URL e nome deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2 py-1 rounded-lg border border-white/35 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel2" class="hidden sm:inline">URL</span>
-                </button>
-            </div>
-
-            <!-- CARD 4: Inferior Direito -->
-            <div 
-                id="cardBox3"
-                onclick="handleCardClick(event, 3)"
-                onkeydown="handleCardKeydown(event, 3)"
-                role="button"
-                tabindex="0"
-                class="pointer-events-auto cursor-pointer absolute bottom-14 right-3 sm:bottom-16 sm:right-5 w-[32%] max-w-[255px] min-w-[125px] aspect-video rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 hover:border-red-500 hover:scale-[1.03] active:scale-95 transition-all duration-300 bg-zinc-900 text-left group/card"
-            >
-                <img id="cardImg3" src="https://placehold.co/480x270/18181b/52525b?text=+" alt="Vídeo 4" class="w-full h-full object-cover brightness-90 group-hover/card:brightness-100 group-hover/card:scale-105 transition-all duration-300">
-                
-                <!-- Faixa Superior com Nome em Destaque -->
-                <div class="absolute inset-x-0 top-0 card-highlight-header px-2.5 py-2 sm:px-3.5 sm:py-2.5 z-10">
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-1.5 h-3.5 sm:h-4 rounded-full bg-red-500 shrink-0 shadow"></span>
-                        <p id="cardTitle3" class="text-white font-black uppercase tracking-wide text-[11px] sm:text-xs md:text-sm leading-tight truncate card-title-shadow">
-                            VÍDEO 4
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Emblema Central de Play de Reproduzir -->
-                <div id="cardPlayEmblem3" class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42%] z-10 w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full bg-red-600/90 group-hover/card:bg-red-500 group-hover/card:scale-110 group-hover/card:shadow-[0_0_20px_rgba(239,68,68,0.85)] text-white flex items-center justify-center shadow-xl border-2 border-white/90 transition-all duration-200">
-                    <svg class="w-4 h-4 sm:w-5 sm:h-5 ml-0.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
-                </div>
-
-                <div id="cardPlayingBadge3" class="hidden absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 z-10 bg-red-600 text-white text-[9px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase tracking-wide border border-white/25">
-                    <i class="fa-solid fa-volume-high animate-pulse"></i>
-                    <span>Tocando</span>
-                </div>
-
-                <div id="cardSavedBadge3" class="hidden absolute inset-0 bg-emerald-600/95 backdrop-blur-[1px] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm gap-1.5 z-20">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Link salvo!</span>
-                </div>
-
-                <button 
-                    type="button"
-                    onclick="openCardEditor(event, 3)"
-                    title="Adicionar ou editar URL e nome deste card"
-                    class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 z-10 bg-black/85 hover:bg-red-600 text-white text-[10px] sm:text-xs font-bold px-2 py-1 rounded-lg border border-white/35 shadow-lg flex items-center gap-1 transition"
-                >
-                    <i class="fa-solid fa-link"></i>
-                    <span id="cardEditLabel3" class="hidden sm:inline">URL</span>
-                </button>
-            </div>
-
-            <!-- MENU CENTRAL DE OCULTAR CARDS (Logo acima do emblema Rádio Explosão) -->
-            <button
-                type="button"
-                id="hideCardsCenterBtn"
-                onclick="hideOverlayCards(event)"
-                title="Ocultar os cards da tela (Tecla H)"
-                class="pointer-events-auto cursor-pointer absolute left-1/2 bottom-[158px] sm:bottom-[200px] md:bottom-[216px] -translate-x-1/2 z-20 bg-white/95 hover:bg-white text-zinc-950 font-extrabold text-[11px] sm:text-xs px-3.5 py-1.5 rounded-full shadow-[0_8px_25px_rgba(0,0,0,0.65)] border border-white/80 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-1.5"
-            >
-                <i class="fa-solid fa-eye-slash text-red-600"></i>
-                <span>Ocultar cards</span>
-            </button>
-
-            <!-- EMBLEMA CIRCULAR CENTRAL: "Rádio Explosão" (Desaparece automaticamente ao reproduzir) -->
-            <div 
-                id="radio-emblem"
-                onclick="loadMainVideo(savedMainVideoUrl || DEFAULT_VIDEO_URL, true, -1)"
-                title="Rádio Explosão"
-                class="pointer-events-auto cursor-pointer absolute left-1/2 bottom-14 sm:bottom-16 -translate-x-1/2 w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-zinc-950 via-red-950 to-zinc-900 border-2 sm:border-[3px] border-yellow-400 shadow-[0_0_30px_rgba(239,68,68,0.65)] hover:scale-105 active:scale-95 transition-all duration-300 flex flex-col items-center justify-center p-2 text-center"
-            >
-                <i class="fa-solid fa-radio text-red-500 text-sm sm:text-lg mb-0.5 drop-shadow"></i>
-                <span class="font-black uppercase tracking-tight text-white text-xs sm:text-base md:text-lg leading-none drop-shadow">
-                    Rádio
-                </span>
-                <span class="font-black uppercase tracking-tight text-yellow-400 text-xs sm:text-base md:text-lg leading-tight drop-shadow">
-                    Explosão
-                </span>
-            </div>
-
         </div>
 
-        <!-- Barra Inferior de Controles do Player -->
-        <div id="controlsBar" class="absolute bottom-0 inset-x-0 z-30 bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-8 pb-2.5 px-3 sm:px-5 flex flex-col gap-2 transition-opacity duration-300">
-            
-            <!-- Barra de Progresso -->
-            <div class="w-full flex items-center">
-                <input 
-                    type="range" 
-                    id="progressBar" 
-                    min="0" 
-                    max="100" 
-                    value="0" 
-                    step="0.1"
-                    aria-label="Progresso do vídeo"
-                    class="w-full h-1.5 bg-zinc-600/80 rounded-lg accent-red-600"
-                >
+        <!-- Faixa Horizontal Rolável de Cards na Parte Inferior Interna -->
+        <div id="bottomHudBar" class="hud-layer relative z-20 px-4 pb-4 sm:px-7 sm:pb-6 w-full">
+            <div id="cardsTrack" class="cards-scroller flex items-center gap-3 sm:gap-4 overflow-x-auto pb-1.5 pt-1">
+                <!-- Os cards são renderizados dinamicamente via JavaScript -->
             </div>
+        </div>
 
-            <!-- Botões de Controle -->
-            <div class="flex items-center justify-between gap-2 text-white">
-                <div class="flex items-center gap-2 sm:gap-3.5">
-                    <button id="playPauseBtn" title="Play / Pause (Espaço, Enter ou K)" class="w-9 h-9 rounded-lg hover:bg-white/15 flex items-center justify-center transition text-base sm:text-lg">
-                        <i id="playPauseIcon" class="fa-solid fa-play"></i>
-                    </button>
-
-                    <button onclick="skipTime(-10)" title="Retroceder 10s (Seta Esquerda)" class="hidden sm:flex w-8 h-8 rounded-lg hover:bg-white/15 items-center justify-center transition text-sm text-zinc-200">
-                        <i class="fa-solid fa-rotate-left"></i>
-                    </button>
-
-                    <button onclick="skipTime(10)" title="Avançar 10s (Seta Direita)" class="hidden sm:flex w-8 h-8 rounded-lg hover:bg-white/15 items-center justify-center transition text-sm text-zinc-200">
-                        <i class="fa-solid fa-rotate-right"></i>
-                    </button>
-
-                    <!-- Volume -->
-                    <div class="flex items-center gap-1.5">
-                        <button id="muteBtn" title="Mutar / Desmutar (Tecla M)" class="w-8 h-8 rounded-lg hover:bg-white/15 flex items-center justify-center transition text-sm sm:text-base">
-                            <i id="volumeIcon" class="fa-solid fa-volume-high"></i>
-                        </button>
-                        <input 
-                            type="range" 
-                            id="volumeSlider" 
-                            min="0" 
-                            max="1" 
-                            step="0.05" 
-                            value="1"
-                            aria-label="Volume"
-                            class="w-14 sm:w-20 h-1 bg-zinc-600 rounded-lg"
-                        >
-                    </div>
-
-                    <!-- Tempo -->
-                    <div class="text-xs sm:text-sm font-medium text-zinc-300 tabular-nums">
-                        <span id="currentTimeDisplay">00:00</span>
-                        <span class="text-zinc-500 mx-0.5">/</span>
-                        <span id="durationDisplay">00:00</span>
-                    </div>
-                </div>
-
-                <!-- Direita: URL Principal, Picture-in-Picture & Tela Cheia -->
-                <div class="flex items-center gap-1.5 sm:gap-2">
-                    <button 
-                        type="button"
-                        id="mainUrlBtn"
-                        onclick="promptVideoUrl()" 
-                        title="Adicionar e salvar URL do reprodutor principal" 
-                        class="h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg bg-white/10 hover:bg-red-600 text-white border border-white/15 hover:border-red-500 flex items-center gap-1.5 transition text-xs font-semibold shadow-sm"
-                    >
-                        <i class="fa-solid fa-link text-red-400"></i>
-                        <span>FORRÓ EXPLOSÃO > https://youtu.be/43FhQuzQXko?is=vPOhVeS3hKKTS4Om</span>
-                    </button>
-
-                    <button 
-                        type="button"
-                        id="pipBtn" 
-                        onclick="togglePictureInPicture()" 
-                        title="Picture-in-Picture / Miniplayer (Tecla P)" 
-                        class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg hover:bg-white/15 flex items-center justify-center transition text-zinc-200 hover:text-white"
-                    >
-                        <svg id="pipIconSvg" class="w-4 h-4 sm:w-[18px] sm:h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="4" width="20" height="15" rx="2" ry="2"></rect>
-                            <rect x="12" y="10" width="8" height="6" rx="1" fill="currentColor"></rect>
+        <!-- Overlay / Modal Interno Compacto para Adicionar Novo Card -->
+        <div id="addCardModal" class="hidden absolute inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 transition-opacity">
+            <div class="w-full max-w-md bg-[#121721]/95 border border-white/15 rounded-3xl p-5 sm:p-6 shadow-2xl text-white">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base sm:text-lg font-bold tracking-tight">Adicionar Novo Card</h2>
+                    <button id="closeAddModalBtn" type="button" class="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition cursor-pointer" title="Fechar">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
-
-                    <button 
-                        type="button"
-                        id="fullscreenBtn" 
-                        onclick="toggleFullscreen()"
-                        title="Assistir em Tela Cheia (Tecla F)" 
-                        class="h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg bg-white/10 hover:bg-red-600 text-white border border-white/15 hover:border-red-500 flex items-center justify-center gap-1.5 transition text-xs font-semibold shadow-sm"
-                    >
-                        <i id="fullscreenIcon" class="fa-solid fa-expand"></i>
-                        <span id="fullscreenLabel" class="hidden sm:inline">Tela Cheia</span>
-                    </button>
                 </div>
-            </div>
-        </div>
 
-        <!-- Notificação Flutuante Discreta -->
-        <div id="playerToast" class="pointer-events-none hidden absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/95 border border-emerald-500/60 text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs sm:text-sm font-semibold backdrop-blur-md">
-            <i id="playerToastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
-            <span id="playerToastText">URL Principal salva!</span>
-        </div>
-
-        <!-- Barra Flutuante de URL Principal com Salvamento Permanente -->
-        <form id="quickUrlBar" class="hidden absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-zinc-950/95 border border-zinc-700 p-2.5 rounded-2xl shadow-2xl w-[92%] max-w-lg backdrop-blur-md">
-            <div class="flex items-center gap-2 flex-1 min-w-0">
-                <span class="w-7 h-7 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center text-xs shrink-0">
-                    <i class="fa-solid fa-link"></i>
-                </span>
-                <input 
-                    type="url" 
-                    id="quickUrlInput" 
-                    placeholder="Cole a URL do vídeo principal (MP4, WebM ou YouTube)..." 
-                    class="bg-zinc-900 text-white text-xs sm:text-sm px-3 py-1.5 rounded-xl border border-zinc-700 focus:border-red-500 outline-none flex-1 min-w-0"
-                    required
-                >
-            </div>
-            <div class="flex items-center justify-end gap-1.5 shrink-0">
-                <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-red-600/20">
-                    <i class="fa-solid fa-floppy-disk"></i>
-                    <span>Salvar e Reproduzir</span>
-                </button>
-                <button type="button" onclick="closeQuickUrlBar()" title="Fechar" class="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-        </form>
-        <!-- Modal Compacto Interno para Adicionar/Editar URL e Título em Destaque de Cada Card -->
-        <div id="cardEditorModal" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <form id="cardEditorForm" class="bg-zinc-900 border border-zinc-700 rounded-2xl p-4 sm:p-5 w-full max-w-sm shadow-2xl space-y-3.5">
-                <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5">
-                    <div class="flex items-center gap-2">
-                        <span class="w-6 h-6 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center text-xs">
-                            <i class="fa-solid fa-circle-play"></i>
-                        </span>
-                        <h3 id="cardEditorHeading" class="text-sm sm:text-base font-bold text-white">Configurar Card 1</h3>
+                <form id="addCardForm" class="space-y-3.5">
+                    <div>
+                        <label for="cardTitleInput" class="block text-xs font-semibold text-white/75 mb-1">Título do Vídeo</label>
+                        <input id="cardTitleInput" type="text" required placeholder="Ex: Câmera 02 - Palco Principal" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/40 transition">
                     </div>
-                    <button type="button" onclick="closeCardEditor()" class="text-zinc-400 hover:text-white w-7 h-7 rounded-lg hover:bg-zinc-800 flex items-center justify-center">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
 
-                <div>
-                    <label for="cardTitleInput" class="block text-xs font-bold text-zinc-200 mb-1">Título em Destaque no Card</label>
-                    <input 
-                        type="text" 
-                        id="cardTitleInput" 
-                        placeholder="Ex: AO VIVO - RÁDIO EXPLOSÃO" 
-                        maxlength="48"
-                        required
-                        class="w-full bg-zinc-950 border border-zinc-700 focus:border-red-500 rounded-xl px-3 py-2 text-xs sm:text-sm text-white font-bold outline-none"
-                    >
-                </div>
+                    <div>
+                        <label for="cardUrlInput" class="block text-xs font-semibold text-white/75 mb-1">Link da URL (MP4, WebM ou YouTube)</label>
+                        <input id="cardUrlInput" type="url" required placeholder="https://www.youtube.com/watch?v=... ou .mp4" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/40 transition">
+                    </div>
 
-                <div>
-                    <label for="cardUrlInput" class="block text-xs font-bold text-zinc-200 mb-1">URL do Vídeo (MP4, WebM ou YouTube)</label>
-                    <input 
-                        type="url" 
-                        id="cardUrlInput" 
-                        placeholder="https://www.youtube.com/watch?v=... ou .mp4" 
-                        required
-                        class="w-full bg-zinc-950 border border-zinc-700 focus:border-red-500 rounded-xl px-3 py-2 text-xs sm:text-sm text-white outline-none"
-                    >
-                </div>
+                    <p id="formErrorMsg" class="hidden text-xs text-red-400 font-medium"></p>
 
-                <div class="flex items-center justify-between gap-2 pt-1">
-                    <button 
-                        type="button" 
-                        id="clearCardBtn"
-                        onclick="clearCurrentCard()" 
-                        class="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-red-950 text-zinc-300 hover:text-red-300 border border-zinc-700 hover:border-red-800 text-xs font-medium transition flex items-center gap-1.5"
-                    >
-                        <i class="fa-solid fa-trash-can"></i>
-                        <span>Limpar</span>
-                    </button>
-
-                    <div class="flex items-center gap-2">
-                        <button type="button" onclick="closeCardEditor()" class="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs sm:text-sm font-medium text-zinc-200 transition">
+                    <div class="flex items-center justify-end gap-2.5 pt-2">
+                        <button type="button" id="cancelAddModalBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white/10 hover:bg-white/20 text-white/85 transition cursor-pointer">
                             Cancelar
                         </button>
-                        <button type="submit" class="px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-xs sm:text-sm font-bold text-white shadow-lg shadow-red-600/20 transition flex items-center gap-1.5">
-                            <i class="fa-solid fa-floppy-disk"></i>
-                            <span>Salvar</span>
+                        <button type="submit" class="px-5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#e11d2b] hover:bg-[#c81724] text-white shadow-lg transition cursor-pointer">
+                            Salvar Card
                         </button>
                     </div>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
+
+        <!-- Notificação interna discreta -->
+        <div id="toastNotification" class="hidden absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 bg-black/85 border border-white/15 text-white text-xs font-medium px-4 py-2 rounded-full shadow-xl backdrop-blur-md text-center max-w-[90%]"></div>
     </div>
 
-    <!-- YouTube IFrame API -->
-    <script src="https://www.youtube.com/iframe_api"></script>
-
     <script>
-        // Chaves de armazenamento permanente no navegador (localStorage)
-        const STORAGE_CARDS_KEY = 'radio_explosao_cards_v1';
-        const STORAGE_MAIN_VIDEO_KEY = 'radio_explosao_main_url';
-        const DEFAULT_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-        const EMPTY_CARD_THUMB = 'https://placehold.co/480x270/18181b/3f3f46?text=%20';
-        const CONFIGURED_DIRECT_THUMB = 'https://placehold.co/480x270/1e1b4b/e0e7ff?text=%20';
+        // Estado inicial com vídeos de exemplo funcionais (MP4 públicos e YouTube)
+        const STORAGE_KEY = 'live_player_video_cards_v1';
 
-        // Carrega os 4 cards salvos no localStorage (ou cria 4 slots vazios na primeira abertura)
-        function loadCardsFromStorage() {
-            try {
-                const raw = localStorage.getItem(STORAGE_CARDS_KEY) || localStorage.getItem('radio_explosao_cards_v2') || localStorage.getItem('radio_explosao_saved_cards_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length === 4) {
-                        return parsed;
-                    }
-                }
-            } catch (err) {
-                console.warn('Falha ao ler cards salvos do localStorage:', err);
+        const defaultCards = [
+            {
+                id: 'card-1',
+                title: 'Sinal Principal • Ambiente',
+                url: '', // Mantém o fundo desfocado da referência ao iniciar
+                isAmbientDefault: true
+            },
+            {
+                id: 'card-2',
+                title: 'Natureza em Alta Definição',
+                url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+            },
+            {
+                id: 'card-3',
+                title: 'Transmissão Espacial 4K',
+                url: 'https://www.youtube.com/watch?v=xRPjKQtRXR8'
+            },
+            {
+                id: 'card-4',
+                title: 'Câmera Externa • Aventura',
+                url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
             }
-            return [
-                { title: '', url: '', thumb: EMPTY_CARD_THUMB },
-                { title: '', url: '', thumb: EMPTY_CARD_THUMB },
-                { title: '', url: '', thumb: EMPTY_CARD_THUMB },
-                { title: '', url: '', thumb: EMPTY_CARD_THUMB }
-            ];
-        }
+        ];
 
-        // Salva os 4 cards permanentemente no localStorage
-        function persistCardsToStorage() {
-            try {
-                localStorage.setItem(STORAGE_CARDS_KEY, JSON.stringify(cardsData));
-            } catch (err) {
-                console.warn('Falha ao salvar cards no localStorage:', err);
-            }
-        }
+        let videoCards = [];
+        let activeCardId = 'card-1';
+        let isUiHidden = false;
 
-        // Carrega a URL principal salva anteriormente (ou usa o vídeo padrão)
-        function loadMainUrlFromStorage() {
-            try {
-                const savedUrl = localStorage.getItem(STORAGE_MAIN_VIDEO_KEY);
-                if (savedUrl && savedUrl.trim().length > 0) {
-                    return savedUrl.trim();
-                }
-            } catch (err) {
-                console.warn('Falha ao ler URL principal do localStorage:', err);
-            }
-            return '';
-        }
+        // Referências do DOM
+        const mainPlayerContainer = document.getElementById('mainPlayerContainer');
+        const cardsTrack = document.getElementById('cardsTrack');
+        const ambientFallback = document.getElementById('ambientFallback');
+        const nativeVideoPlayer = document.getElementById('nativeVideoPlayer');
+        const youtubeContainer = document.getElementById('youtubeContainer');
+        const youtubeIframe = document.getElementById('youtubeIframe');
+        const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 
-        // Salva a URL principal no localStorage
-        function persistMainUrlToStorage(url) {
-            try {
-                if (url && url.trim()) {
-                    localStorage.setItem(STORAGE_MAIN_VIDEO_KEY, url.trim());
-                    savedMainVideoUrl = url.trim();
-                }
-            } catch (err) {
-                console.warn('Falha ao salvar URL principal no localStorage:', err);
-            }
-        }
+        // Referências da Interface Sobreposta (HUD) e Novos Botões
+        const topHudBar = document.getElementById('topHudBar');
+        const bottomHudBar = document.getElementById('bottomHudBar');
+        const topGradient = document.getElementById('topGradient');
+        const bottomGradient = document.getElementById('bottomGradient');
+        const restoreUiOverlay = document.getElementById('restoreUiOverlay');
 
-        // Estado inicial persistido
-        let cardsData = loadCardsFromStorage();
-        let savedMainVideoUrl = loadMainUrlFromStorage();
-
-        let state = {
-            playerType: 'native',
-            ytPlayer: null,
-            ytReady: false,
-            pendingYtId: null,
-            pendingYtAutoPlay: false,
-            ytTimer: null,
-            editingCardIndex: null,
-            activeCardIndex: -1,
-            cardsHidden: false,
-            isPlaying: false,
-            emblemHideTimer: null,
-            toastTimer: null
-        };
-
-        // Referências DOM
-        const playerContainer = document.getElementById('playerContainer');
-        const nativeVideo = document.getElementById('nativeVideo');
-        const youtubeWrapper = document.getElementById('youtubeWrapper');
-        const ytClickLayer = document.getElementById('ytClickLayer');
-        const hideCardsCenterBtn = document.getElementById('hideCardsCenterBtn');
-        const radioEmblem = document.getElementById('radio-emblem');
-        const bigCenterPlayBtn = document.getElementById('bigCenterPlayBtn');
-        const playPauseBtn = document.getElementById('playPauseBtn');
-        const playPauseIcon = document.getElementById('playPauseIcon');
-        const muteBtn = document.getElementById('muteBtn');
-        const volumeIcon = document.getElementById('volumeIcon');
-        const volumeSlider = document.getElementById('volumeSlider');
-        const progressBar = document.getElementById('progressBar');
-        const currentTimeDisplay = document.getElementById('currentTimeDisplay');
-        const durationDisplay = document.getElementById('durationDisplay');
-        const fullscreenBtn = document.getElementById('fullscreenBtn');
-        const fullscreenIcon = document.getElementById('fullscreenIcon');
-        const fullscreenLabel = document.getElementById('fullscreenLabel');
+        const hideUiBtn = document.getElementById('hideUiBtn');
         const pipBtn = document.getElementById('pipBtn');
-        const keyFeedbackOverlay = document.getElementById('keyFeedbackOverlay');
-        const keyFeedbackIcon = document.getElementById('keyFeedbackIcon');
-        const quickUrlBar = document.getElementById('quickUrlBar');
-        const quickUrlInput = document.getElementById('quickUrlInput');
-        const cardEditorModal = document.getElementById('cardEditorModal');
-        const cardEditorForm = document.getElementById('cardEditorForm');
-        const cardEditorHeading = document.getElementById('cardEditorHeading');
-        const cardUrlInput = document.getElementById('cardUrlInput');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const fullscreenExpandIcon = document.getElementById('fullscreenExpandIcon');
+        const fullscreenCompressIcon = document.getElementById('fullscreenCompressIcon');
+
+        // Referências do Modal
+        const addCardModal = document.getElementById('addCardModal');
+        const openAddModalBtn = document.getElementById('openAddModalBtn');
+        const closeAddModalBtn = document.getElementById('closeAddModalBtn');
+        const cancelAddModalBtn = document.getElementById('cancelAddModalBtn');
+        const addCardForm = document.getElementById('addCardForm');
         const cardTitleInput = document.getElementById('cardTitleInput');
-        const clearCardBtn = document.getElementById('clearCardBtn');
-        const playerToast = document.getElementById('playerToast');
-        const playerToastIcon = document.getElementById('playerToastIcon');
-        const playerToastText = document.getElementById('playerToastText');
+        const cardUrlInput = document.getElementById('cardUrlInput');
+        const formErrorMsg = document.getElementById('formErrorMsg');
+        const toastNotification = document.getElementById('toastNotification');
 
-        // Exibe notificação discreta no topo do player
-        function showPlayerToast(message, type = 'success') {
-            if (!playerToast) return;
-            if (state.toastTimer) clearTimeout(state.toastTimer);
-
-            playerToastText.textContent = message;
-            if (type === 'info') {
-                playerToast.className = 'pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/95 border border-amber-500/70 text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs sm:text-sm font-semibold backdrop-blur-md';
-                playerToastIcon.className = 'fa-solid fa-circle-info text-amber-400';
-            } else {
-                playerToast.className = 'pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/95 border border-emerald-500/60 text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs sm:text-sm font-semibold backdrop-blur-md';
-                playerToastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
-            }
-
-            playerToast.classList.remove('hidden');
-            state.toastTimer = setTimeout(() => {
-                playerToast.classList.add('hidden');
-            }, 2600);
-        }
-
-        // Controla a visibilidade do emblema circular 'Rádio Explosão':
-        // Fica totalmente oculto durante a reprodução ativa ou quando os cards estiverem ocultos manualmente
-        function updateEmblemVisibility() {
-            if (!radioEmblem) return;
-            if (state.emblemHideTimer) {
-                clearTimeout(state.emblemHideTimer);
-                state.emblemHideTimer = null;
-            }
-
-            const shouldShow = !state.isPlaying && !state.cardsHidden;
-            if (shouldShow) {
-                radioEmblem.style.visibility = 'visible';
-                radioEmblem.style.opacity = '1';
-                radioEmblem.style.transform = 'translateX(-50%) scale(1)';
-                radioEmblem.style.pointerEvents = 'auto';
-            } else {
-                radioEmblem.style.opacity = '0';
-                radioEmblem.style.transform = 'translateX(-50%) scale(0.92)';
-                radioEmblem.style.pointerEvents = 'none';
-                state.emblemHideTimer = setTimeout(() => {
-                    if (state.isPlaying || state.cardsHidden) {
-                        radioEmblem.style.visibility = 'hidden';
+        // Carrega cards salvos ou usa os padrões
+        function loadCards() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        videoCards = parsed;
+                        return;
                     }
-                }, 260);
-            }
-        }
-
-        // Oculta os 4 cards, o botão central "Ocultar cards" e o emblema "Rádio Explosão" para visualização limpa do vídeo
-        function hideOverlayCards(event) {
-            if (event) event.stopPropagation();
-            if (state.cardsHidden) return;
-            state.cardsHidden = true;
-
-            for (let i = 0; i < 4; i++) {
-                const box = document.getElementById(`cardBox${i}`);
-                if (box) {
-                    box.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
-                    box.classList.remove('pointer-events-auto');
                 }
+            } catch (e) {
+                console.warn('Falha ao ler localStorage:', e);
             }
-            if (hideCardsCenterBtn) {
-                hideCardsCenterBtn.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
-                hideCardsCenterBtn.classList.remove('pointer-events-auto');
-            }
-            updateEmblemVisibility();
-            showPlayerToast('Cards ocultos. Toque na tela para exibir novamente.', 'info');
+            videoCards = [...defaultCards];
         }
 
-        // Restaura os 4 cards e o botão central "Ocultar cards" (e o emblema somente se o vídeo estiver pausado)
-        function showOverlayCards() {
-            if (!state.cardsHidden) return;
-            state.cardsHidden = false;
-
-            for (let i = 0; i < 4; i++) {
-                const box = document.getElementById(`cardBox${i}`);
-                if (box) {
-                    box.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
-                    box.classList.add('pointer-events-auto');
-                }
+        function saveCards() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(videoCards));
+            } catch (e) {
+                console.warn('Falha ao salvar no localStorage:', e);
             }
-            if (hideCardsCenterBtn) {
-                hideCardsCenterBtn.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
-                hideCardsCenterBtn.classList.add('pointer-events-auto');
-            }
-            updateEmblemVisibility();
         }
 
-        // Extrai ID do YouTube (suporta watch?v=, youtu.be/, embed/, shorts/, live/ ou ID direto de 11 caracteres)
+        // Extrai ID do YouTube se a URL for do YouTube
         function extractYouTubeId(url) {
             if (!url) return null;
-            const cleanUrl = url.trim();
-            if (/^[a-zA-Z0-9_-]{11}$/.test(cleanUrl)) {
-                return cleanUrl;
-            }
-            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-            const match = cleanUrl.match(regex);
+            const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+            const match = url.match(regExp);
             return match ? match[1] : null;
         }
 
-        // Atualiza a interface visual dos 4 cards (título em destaque, emblema luminoso de play, miniatura e destaque do card ativo)
-        function renderCardsUI() {
-            cardsData.forEach((card, index) => {
-                const boxEl = document.getElementById(`cardBox${index}`);
-                const imgEl = document.getElementById(`cardImg${index}`);
-                const titleEl = document.getElementById(`cardTitle${index}`);
-                const editLabelEl = document.getElementById(`cardEditLabel${index}`);
-                const playingBadgeEl = document.getElementById(`cardPlayingBadge${index}`);
-                const playEmblemEl = document.getElementById(`cardPlayEmblem${index}`);
-                const hasUrl = Boolean(card.url && card.url.trim().length > 0);
-                const isActiveCard = hasUrl && state.activeCardIndex === index;
-
-                if (imgEl) {
-                    imgEl.src = hasUrl ? (card.thumb || CONFIGURED_DIRECT_THUMB) : EMPTY_CARD_THUMB;
-                    imgEl.onerror = () => {
-                        imgEl.src = CONFIGURED_DIRECT_THUMB;
-                    };
-                }
-
-                if (titleEl) {
-                    const customTitle = card.title ? card.title.trim() : '';
-                    titleEl.textContent = customTitle || (hasUrl ? `VÍDEO ${index + 1}` : `ADICIONAR VÍDEO ${index + 1}`);
-                }
-
-                if (editLabelEl) {
-                    editLabelEl.textContent = hasUrl ? 'Editar' : 'URL / Título';
-                }
-
-                if (playEmblemEl) {
-                    if (hasUrl) {
-                        playEmblemEl.classList.remove('opacity-75', 'bg-zinc-800/90');
-                        playEmblemEl.classList.add('bg-red-600/95', 'opacity-100', 'play-emblem-glow');
-                    } else {
-                        playEmblemEl.classList.remove('bg-red-600/95', 'opacity-100', 'play-emblem-glow');
-                        playEmblemEl.classList.add('bg-zinc-800/90', 'opacity-75');
-                    }
-                }
-
-                if (boxEl) {
-                    if (isActiveCard) {
-                        boxEl.classList.remove('border-white/90');
-                        boxEl.classList.add('border-red-500', 'ring-2', 'ring-red-500/70');
-                    } else {
-                        boxEl.classList.remove('border-red-500', 'ring-2', 'ring-red-500/70');
-                        boxEl.classList.add('border-white/90');
-                    }
-                }
-
-                if (playingBadgeEl) {
-                    if (isActiveCard) {
-                        playingBadgeEl.classList.remove('hidden');
-                    } else {
-                        playingBadgeEl.classList.add('hidden');
-                    }
-                }
-            });
+        // Exibe aviso rápido dentro do próprio reprodutor
+        let toastTimeout;
+        function showToast(message) {
+            toastNotification.textContent = message;
+            toastNotification.classList.remove('hidden');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toastNotification.classList.add('hidden');
+            }, 3000);
         }
 
-        // Mostra confirmação rápida "Link salvo!" dentro do card atualizado
-        function showCardSavedBadge(index) {
-            const badge = document.getElementById(`cardSavedBadge${index}`);
-            if (!badge) return;
-            badge.classList.remove('hidden');
-            setTimeout(() => {
-                badge.classList.add('hidden');
-            }, 1400);
+        // =========================================================================
+        // 1) OCULTAR / RESTAURAR INTERFACE (MODO TELA LIMPA)
+        // =========================================================================
+        function hideInterface() {
+            if (isUiHidden) return;
+            isUiHidden = true;
+
+            topHudBar.classList.add('hud-hidden-top');
+            bottomHudBar.classList.add('hud-hidden-bottom');
+            topGradient.classList.add('hud-hidden-fade');
+            bottomGradient.classList.add('hud-hidden-fade');
+
+            // Ativa camada transparente que intercepta o próximo toque/clique sem pausar o vídeo
+            restoreUiOverlay.classList.remove('hidden');
+            showToast('Interface oculta. Toque na tela para reexibir.');
         }
 
-        // Clique no card: se tiver URL salva, reproduz imediatamente no reprodutor principal; caso contrário, abre o editor
-        function handleCardClick(event, index) {
-            event.stopPropagation();
-            const card = cardsData[index];
-            if (card && card.url && card.url.trim() !== '') {
-                const displayName = (card.title && card.title.trim()) ? card.title.trim() : `VÍDEO ${index + 1}`;
-                loadMainVideo(card.url.trim(), true, index);
-                showPlayerToast(`Reproduzindo: ${displayName}`);
-                playerContainer.focus({ preventScroll: true });
-            } else {
-                openCardEditor(event, index);
-            }
-        }
-
-        // Suporte de teclado (Enter ou Espaço) quando um card estiver focado
-        function handleCardKeydown(event, index) {
-            if (event.key === 'Enter' || event.key === ' ') {
+        function restoreInterface(event) {
+            if (!isUiHidden) return;
+            if (event) {
                 event.preventDefault();
-                handleCardClick(event, index);
+                event.stopPropagation();
+            }
+            isUiHidden = false;
+
+            topHudBar.classList.remove('hud-hidden-top');
+            bottomHudBar.classList.remove('hud-hidden-bottom');
+            topGradient.classList.remove('hud-hidden-fade');
+            bottomGradient.classList.remove('hud-hidden-fade');
+
+            restoreUiOverlay.classList.add('hidden');
+        }
+
+        hideUiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideInterface();
+        });
+
+        // Suporte imediato tanto para toque mobile (touchend) quanto clique desktop (click)
+        restoreUiOverlay.addEventListener('touchend', restoreInterface, { passive: false });
+        restoreUiOverlay.addEventListener('click', restoreInterface);
+
+        // =========================================================================
+        // 2) PICTURE-IN-PICTURE (PiP)
+        // =========================================================================
+        async function togglePictureInPicture() {
+            const isNativeVideoVisible = !nativeVideoPlayer.classList.contains('hidden');
+            const isYouTubeVisible = !youtubeContainer.classList.contains('hidden');
+
+            if (isYouTubeVisible) {
+                showToast('O Picture-in-Picture nativo está disponível apenas para vídeos diretos (MP4/WebM).');
+                return;
+            }
+
+            if (!isNativeVideoVisible || !nativeVideoPlayer.src) {
+                showToast('Selecione um vídeo direto (MP4/WebM) para ativar o Picture-in-Picture.');
+                return;
+            }
+
+            if (!document.pictureInPictureEnabled && !nativeVideoPlayer.webkitSetPresentationMode) {
+                showToast('Seu navegador não suporta Picture-in-Picture.');
+                return;
+            }
+
+            try {
+                if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                } else if (nativeVideoPlayer.requestPictureInPicture) {
+                    await nativeVideoPlayer.requestPictureInPicture();
+                } else if (nativeVideoPlayer.webkitSetPresentationMode) {
+                    // Fallback Safari iOS/macOS
+                    const mode = nativeVideoPlayer.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture';
+                    nativeVideoPlayer.webkitSetPresentationMode(mode);
+                }
+            } catch (err) {
+                console.warn('Erro ao alternar PiP:', err);
+                showToast('Inicie a reprodução do vídeo antes de ativar o Picture-in-Picture.');
             }
         }
 
-        // Abre o editor interno para adicionar/alterar o nome em destaque e a URL salva do card
-        function openCardEditor(event, index) {
-            event.stopPropagation();
-            state.editingCardIndex = index;
-            const card = cardsData[index];
-            cardEditorHeading.textContent = `Configurar Card ${index + 1}`;
-            cardTitleInput.value = card.title || '';
-            cardUrlInput.value = card.url || '';
+        pipBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            togglePictureInPicture();
+        });
 
-            if (card.url && card.url.trim() !== '') {
-                clearCardBtn.classList.remove('hidden');
+        nativeVideoPlayer.addEventListener('enterpictureinpicture', () => {
+            pipBtn.classList.add('bg-[#e11d2b]', 'border-red-400');
+            pipBtn.classList.remove('bg-white/15');
+        });
+
+        nativeVideoPlayer.addEventListener('leavepictureinpicture', () => {
+            pipBtn.classList.remove('bg-[#e11d2b]', 'border-red-400');
+            pipBtn.classList.add('bg-white/15');
+        });
+
+        // =========================================================================
+        // 3) TELA CHEIA (FULLSCREEN) DO CONTAINER PRINCIPAL
+        // =========================================================================
+        function updateFullscreenIcons() {
+            const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+            if (isFs) {
+                fullscreenExpandIcon.classList.add('hidden');
+                fullscreenCompressIcon.classList.remove('hidden');
+                fullscreenBtn.title = 'Sair da Tela Cheia';
             } else {
-                clearCardBtn.classList.add('hidden');
+                fullscreenExpandIcon.classList.remove('hidden');
+                fullscreenCompressIcon.classList.add('hidden');
+                fullscreenBtn.title = 'Tela Cheia';
+            }
+        }
+
+        async function toggleFullscreen() {
+            const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+            try {
+                if (!isFs) {
+                    if (mainPlayerContainer.requestFullscreen) {
+                        await mainPlayerContainer.requestFullscreen();
+                    } else if (mainPlayerContainer.webkitRequestFullscreen) {
+                        await mainPlayerContainer.webkitRequestFullscreen();
+                    }
+                } else {
+                    if (document.exitFullscreen) {
+                        await document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        await document.webkitExitFullscreen();
+                    }
+                }
+            } catch (err) {
+                console.warn('Erro ao alternar tela cheia:', err);
+                showToast('Não foi possível ativar a tela cheia neste ambiente.');
+            }
+        }
+
+        fullscreenBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+        });
+
+        document.addEventListener('fullscreenchange', updateFullscreenIcons);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenIcons);
+
+        // =========================================================================
+        // REPRODUÇÃO E GERENCIAMENTO DOS CARDS
+        // =========================================================================
+        function playCard(card) {
+            activeCardId = card.id;
+            nowPlayingTitle.textContent = card.title;
+
+            // Encerra PiP ativo se trocar para YouTube ou Sinal Ambiente
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture().catch(() => {});
             }
 
-            cardEditorModal.classList.remove('hidden');
+            // Pausa e limpa players anteriores
+            nativeVideoPlayer.pause();
+            nativeVideoPlayer.removeAttribute('src');
+            nativeVideoPlayer.load();
+            nativeVideoPlayer.classList.add('hidden');
+
+            youtubeIframe.src = '';
+            youtubeContainer.classList.add('hidden');
+
+            if (!card.url || card.isAmbientDefault) {
+                ambientFallback.classList.remove('opacity-0');
+                renderCards();
+                return;
+            }
+
+            const ytId = extractYouTubeId(card.url);
+
+            if (ytId) {
+                ambientFallback.classList.add('opacity-0');
+                youtubeContainer.classList.remove('hidden');
+                youtubeIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
+            } else {
+                ambientFallback.classList.add('opacity-0');
+                nativeVideoPlayer.classList.remove('hidden');
+                nativeVideoPlayer.src = card.url;
+                nativeVideoPlayer.play().catch(() => {
+                    showToast('Clique no vídeo para iniciar a reprodução.');
+                });
+            }
+
+            renderCards();
+        }
+
+        function removeCard(event, id) {
+            event.stopPropagation();
+            if (videoCards.length <= 1) {
+                showToast('Mantenha pelo menos 1 card no reprodutor.');
+                return;
+            }
+
+            const index = videoCards.findIndex(c => c.id === id);
+            if (index === -1) return;
+
+            videoCards.splice(index, 1);
+            saveCards();
+
+            if (activeCardId === id) {
+                playCard(videoCards[0]);
+            } else {
+                renderCards();
+            }
+            showToast('Card removido.');
+        }
+
+        function renderCards() {
+            cardsTrack.innerHTML = '';
+
+            videoCards.forEach((card) => {
+                const isActive = card.id === activeCardId;
+                const ytId = extractYouTubeId(card.url);
+                const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg` : null;
+
+                const cardEl = document.createElement('div');
+                cardEl.className = `group relative flex-shrink-0 w-44 sm:w-52 rounded-2xl p-2.5 transition-all duration-200 cursor-pointer backdrop-blur-md border ${
+                    isActive
+                        ? 'bg-white/20 border-red-500 shadow-[0_0_20px_rgba(225,29,43,0.4)] scale-[1.02]'
+                        : 'bg-black/55 hover:bg-white/15 border-white/15 hover:border-white/30'
+                }`;
+
+                cardEl.onclick = () => playCard(card);
+
+                const mediaPreviewHTML = thumbUrl
+                    ? `<img src="${thumbUrl}" alt="${card.title}" onerror="this.style.display='none'" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300">`
+                    : `<div class="w-full h-full bg-gradient-to-br from-[#2a1c12] via-[#161e29] to-[#0b0f17]"></div>`;
+
+                cardEl.innerHTML = `
+                    <div class="relative w-full h-16 sm:h-20 rounded-xl overflow-hidden bg-black/60 mb-2 flex items-center justify-center">
+                        ${mediaPreviewHTML}
+                        <div class="absolute inset-0 bg-black/25 group-hover:bg-black/10 transition"></div>
+                        
+                        <!-- Ícone Central de Play -->
+                        <div class="absolute w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${
+                            isActive ? 'bg-[#e11d2b] text-white' : 'bg-white/90 text-gray-900'
+                        }">
+                            <svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </div>
+
+                        <!-- Indicador de Tocando Agora -->
+                        ${isActive ? `<span class="absolute top-1.5 left-1.5 bg-[#e11d2b] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider uppercase">No Ar</span>` : ''}
+
+                        <!-- Botão Discreto de Remover Card -->
+                        <button type="button" title="Remover card" class="remove-card-btn opacity-80 sm:opacity-0 group-hover:opacity-100 absolute top-1.5 right-1.5 w-6 h-6 rounded-lg bg-black/75 hover:bg-red-600 text-white flex items-center justify-center transition cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="px-0.5">
+                        <p class="text-white text-xs sm:text-[13px] font-semibold truncate leading-snug" title="${card.title}">
+                            ${card.title}
+                        </p>
+                        <p class="text-white/55 text-[10px] truncate mt-0.5">
+                            ${ytId ? 'YouTube' : (card.url ? 'Vídeo Direto' : 'Sinal Ambiente')}
+                        </p>
+                    </div>
+                `;
+
+                const removeBtn = cardEl.querySelector('.remove-card-btn');
+                removeBtn.addEventListener('click', (e) => removeCard(e, card.id));
+
+                cardsTrack.appendChild(cardEl);
+            });
+
+            // Card rápido "+ Novo" no final da fila horizontal
+            const quickAddCard = document.createElement('button');
+            quickAddCard.type = 'button';
+            quickAddCard.className = 'flex-shrink-0 w-28 sm:w-32 h-[106px] sm:h-[124px] rounded-2xl border border-dashed border-white/25 hover:border-white/60 bg-white/5 hover:bg-white/10 backdrop-blur-md flex flex-col items-center justify-center gap-1.5 text-white/75 hover:text-white transition cursor-pointer';
+            quickAddCard.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                </div>
+                <span class="text-[11px] font-semibold">Novo Card</span>
+            `;
+            quickAddCard.onclick = openModal;
+            cardsTrack.appendChild(quickAddCard);
+        }
+
+        // Controles do Modal Interno
+        function openModal() {
+            formErrorMsg.classList.add('hidden');
+            cardTitleInput.value = '';
+            cardUrlInput.value = '';
+            addCardModal.classList.remove('hidden');
             setTimeout(() => cardTitleInput.focus(), 50);
         }
 
-        function closeCardEditor() {
-            cardEditorModal.classList.add('hidden');
-            state.editingCardIndex = null;
-            playerContainer.focus({ preventScroll: true });
+        function closeModal() {
+            addCardModal.classList.add('hidden');
         }
 
-        // Remove o link salvo do card em edição
-        function clearCurrentCard() {
-            if (state.editingCardIndex === null) return;
-            const idx = state.editingCardIndex;
-            cardsData[idx] = {
-                title: '',
-                url: '',
-                thumb: EMPTY_CARD_THUMB
-            };
-            if (state.activeCardIndex === idx) {
-                state.activeCardIndex = -1;
-            }
-            persistCardsToStorage();
-            renderCardsUI();
-            closeCardEditor();
-        }
+        openAddModalBtn.addEventListener('click', openModal);
+        closeAddModalBtn.addEventListener('click', closeModal);
+        cancelAddModalBtn.addEventListener('click', closeModal);
 
-        // Salva o nome em destaque e a URL do card permanentemente no localStorage
-        cardEditorForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (state.editingCardIndex === null) return;
-
-            const idx = state.editingCardIndex;
-            const rawUrl = cardUrlInput.value.trim();
-            if (!rawUrl) return;
-
-            const rawTitle = cardTitleInput.value.trim();
-            const ytId = extractYouTubeId(rawUrl);
-            const autoThumb = ytId 
-                ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`
-                : CONFIGURED_DIRECT_THUMB;
-
-            cardsData[idx] = {
-                title: rawTitle || `VÍDEO ${idx + 1}`,
-                url: rawUrl,
-                thumb: autoThumb
-            };
-
-            persistCardsToStorage();
-            renderCardsUI();
-            closeCardEditor();
-            showCardSavedBadge(idx);
+        addCardModal.addEventListener('click', (e) => {
+            if (e.target === addCardModal) closeModal();
         });
 
-        // Carrega e reproduz um vídeo no reprodutor principal (URL direta ou YouTube)
-        function loadMainVideo(url, autoPlay = true, sourceCardIndex = -1) {
-            if (!url || !url.trim()) return;
-            const cleanUrl = url.trim();
-            const ytId = extractYouTubeId(cleanUrl);
+        addCardForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const title = cardTitleInput.value.trim();
+            const url = cardUrlInput.value.trim();
 
-            // Atualiza qual card está ativo no momento (-1 quando carregado pela URL Principal)
-            state.activeCardIndex = sourceCardIndex;
-            renderCardsUI();
-
-            // Persiste a URL ativa como vídeo principal salvo
-            persistMainUrlToStorage(cleanUrl);
-
-            if (ytId) {
-                // Sai do Picture-in-Picture caso um vídeo nativo esteja flutuando
-                if (document.pictureInPictureElement) {
-                    document.exitPictureInPicture().catch(() => {});
-                }
-
-                // Modo YouTube
-                state.playerType = 'youtube';
-                nativeVideo.pause();
-                nativeVideo.classList.add('hidden');
-                youtubeWrapper.classList.remove('hidden');
-
-                if (state.ytReady && state.ytPlayer) {
-                    if (autoPlay) {
-                        state.ytPlayer.loadVideoById(ytId);
-                    } else {
-                        state.ytPlayer.cueVideoById(ytId);
-                    }
-                    startYtProgressTracker();
-                } else {
-                    state.pendingYtId = ytId;
-                    state.pendingYtAutoPlay = autoPlay;
-                }
-                updatePlayStateUI(autoPlay);
-            } else {
-                // Modo HTML5 Direto (MP4 / WebM / OGG)
-                state.playerType = 'native';
-                stopYtProgressTracker();
-                if (state.ytReady && state.ytPlayer && typeof state.ytPlayer.stopVideo === 'function') {
-                    state.ytPlayer.stopVideo();
-                }
-                youtubeWrapper.classList.add('hidden');
-                nativeVideo.classList.remove('hidden');
-
-                nativeVideo.src = cleanUrl;
-                nativeVideo.load();
-                if (autoPlay) {
-                    nativeVideo.play().then(() => {
-                        updatePlayStateUI(true);
-                    }).catch(() => {
-                        updatePlayStateUI(false);
-                    });
-                } else {
-                    updatePlayStateUI(false);
-                }
+            if (!title || !url) {
+                formErrorMsg.textContent = 'Preencha o título e a URL válida do vídeo.';
+                formErrorMsg.classList.remove('hidden');
+                return;
             }
-        }
 
-        // Inicialização YouTube IFrame API
-        window.onYouTubeIframeAPIReady = function () {
-            state.ytPlayer = new YT.Player('youtubePlayer', {
-                videoId: '',
-                playerVars: {
-                    controls: 0,
-                    rel: 0,
-                    modestbranding: 1,
-                    playsinline: 1,
-                    disablekb: 1
-                },
-                events: {
-                    onReady: () => {
-                        state.ytReady = true;
-                        state.ytPlayer.setVolume(Math.round(volumeSlider.value * 100));
-                        if (state.pendingYtId) {
-                            if (state.pendingYtAutoPlay) {
-                                state.ytPlayer.loadVideoById(state.pendingYtId);
-                            } else {
-                                state.ytPlayer.cueVideoById(state.pendingYtId);
-                            }
-                            startYtProgressTracker();
-                        }
-                    },
-                    onStateChange: (event) => {
-                        if (event.data === YT.PlayerState.PLAYING) {
-                            updatePlayStateUI(true);
-                            startYtProgressTracker();
-                        } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
-                            updatePlayStateUI(false);
-                        }
-                    }
-                }
-            });
-        };
+            try {
+                new URL(url);
+            } catch (_) {
+                formErrorMsg.textContent = 'Insira um link de URL válido (ex: https://...).';
+                formErrorMsg.classList.remove('hidden');
+                return;
+            }
 
-        f
+            const newCard = {
+                id: 'card-' + Date.now(),
+                title,
+                url
+            };
+
+            videoCards.push(newCard);
+            saveCards();
+            closeModal();
+            playCard(newCard);
+            showToast('Card adicionado e reproduzindo!');
+
+            setTimeout(() => {
+                cardsTrack.scrollTo({ left: cardsTrack.scrollWidth, behavior: 'smooth' });
+            }, 100);
+        });
+
+        // Inicialização
+        loadCards();
+        playCard(videoCards[0]);
+    </script>
+</body>
+</html>
+```

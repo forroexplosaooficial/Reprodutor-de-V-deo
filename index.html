@@ -267,11 +267,6 @@
             password: '1540'
         };
 
-        // Endpoint público compartilhado para todos os visitantes (GET retorna a lista; POST publica a lista atualizada)
-        // Se vazio, salva localmente no navegador via localStorage.
-        const PUBLIC_CARDS_API_URL = 'https://forroexplosaooficial.github.io/Reprodutor-de-V-deo/';
-        const PUBLIC_POLL_MS = 15000;
-
         const STORAGE_KEY = 'live_player_video_cards_v2';
 
         const defaultCards = [
@@ -290,8 +285,11 @@
                 title: 'VejaTv',
                 url: 'https://gpa-vja.otteravision.com/gpa/vja/vja.m3u8'
             },
-            {
-                id: 'card-4',
+            {   id: 'card-4',
+                title: 'Tv Universal',
+                url: 'https://644398c.ha.azioncdn.net/primary/tvuniversal_480p.sdp/playlist.m3u8'
+            },
+            {   id: 'card-5',
                 title: 'Fifa +',
                 url: 'https://e3be9ac5.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctYnJfRklGQVBsdXNQb3J0dWd1ZXNlX0hMUw/playlist.m3u8'
             }
@@ -354,60 +352,28 @@
             return username === OWNER_CREDENTIALS.username && password === OWNER_CREDENTIALS.password;
         }
 
-        function loadLocalCards() {
+        function loadCards() {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        return parsed;
+                        videoCards = parsed;
+                        return;
                     }
                 }
             } catch (e) {
                 console.warn('Falha ao ler localStorage:', e);
             }
-            return [...defaultCards];
+            videoCards = [...defaultCards];
         }
 
-        function saveLocalCards(cards) {
+        function saveCards() {
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(videoCards));
             } catch (e) {
                 console.warn('Falha ao salvar no localStorage:', e);
             }
-        }
-
-        async function fetchPublicCards() {
-            if (!PUBLIC_CARDS_API_URL) {
-                return loadLocalCards();
-            }
-            const response = await fetch(PUBLIC_CARDS_API_URL, { cache: 'no-store' });
-            if (!response.ok) {
-                throw new Error('Falha ao buscar cards públicos');
-            }
-            const data = await response.json();
-            const list = Array.isArray(data) ? data : data.cards;
-            if (!Array.isArray(list) || list.length === 0) {
-                return [...defaultCards];
-            }
-            saveLocalCards(list);
-            return list;
-        }
-
-        async function saveCardsPublicly(cards, username, password) {
-            saveLocalCards(cards);
-            if (!PUBLIC_CARDS_API_URL) {
-                return { publicSync: false };
-            }
-            const response = await fetch(PUBLIC_CARDS_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, cards })
-            });
-            if (!response.ok) {
-                throw new Error('Erro ao publicar cards no servidor');
-            }
-            return { publicSync: true };
         }
 
         function extractYouTubeId(url) {
@@ -581,7 +547,6 @@
         }
 
         function playCard(card) {
-            if (!card) return;
             activeCardId = card.id;
             nowPlayingTitle.textContent = card.title;
 
@@ -698,7 +663,7 @@
             if (e.target === removeAuthModal) closeRemoveModal();
         });
 
-        removeCardForm.addEventListener('submit', async (e) => {
+        removeCardForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const username = removeUserInput.value.trim();
             const password = removePassInput.value;
@@ -711,29 +676,19 @@
 
             const idToRemove = pendingRemoveCardId;
             const index = videoCards.findIndex(c => c.id === idToRemove);
-            if (index === -1) {
-                closeRemoveModal();
-                return;
+            closeRemoveModal();
+
+            if (index === -1) return;
+
+            videoCards.splice(index, 1);
+            saveCards();
+
+            if (activeCardId === idToRemove) {
+                playCard(videoCards[0]);
+            } else {
+                renderCards();
             }
-
-            const nextCards = videoCards.filter(c => c.id !== idToRemove);
-
-            try {
-                const res = await saveCardsPublicly(nextCards, username, password);
-                videoCards = nextCards;
-                closeRemoveModal();
-
-                if (activeCardId === idToRemove) {
-                    playCard(videoCards[0]);
-                } else {
-                    renderCards();
-                }
-                showToast(res.publicSync ? 'Card removido publicamente!' : 'Card removido localmente.');
-            } catch (err) {
-                console.warn(err);
-                removeErrorMsg.textContent = 'Falha ao atualizar a lista pública no servidor.';
-                removeErrorMsg.classList.remove('hidden');
-            }
+            showToast('Card removido.');
         });
 
         function renderCards() {
@@ -843,7 +798,7 @@
             if (e.target === addCardModal) closeModal();
         });
 
-        addCardForm.addEventListener('submit', async (e) => {
+        addCardForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const username = ownerUserInput.value.trim();
             const password = ownerPassInput.value;
@@ -876,62 +831,20 @@
                 url
             };
 
-            const nextCards = [...videoCards, newCard];
+            videoCards.push(newCard);
+            saveCards();
+            closeModal();
+            playCard(newCard);
+            showToast('Card adicionado e reproduzindo!');
 
-            try {
-                const res = await saveCardsPublicly(nextCards, username, password);
-                videoCards = nextCards;
-                closeModal();
-                playCard(newCard);
-                showToast(
-                    res.publicSync
-                        ? 'Card adicionado e atualizado para todos!'
-                        : 'Card adicionado localmente (defina PUBLIC_CARDS_API_URL para todos).'
-                );
-
-                setTimeout(() => {
-                    cardsTrack.scrollTo({ left: cardsTrack.scrollWidth, behavior: 'smooth' });
-                }, 100);
-            } catch (err) {
-                console.warn(err);
-                formErrorMsg.textContent = 'Não foi possível publicar o card para todos.';
-                formErrorMsg.classList.remove('hidden');
-            }
+            setTimeout(() => {
+                cardsTrack.scrollTo({ left: cardsTrack.scrollWidth, behavior: 'smooth' });
+            }, 100);
         });
 
-        async function pollPublicCards() {
-            if (!PUBLIC_CARDS_API_URL) return;
-            try {
-                const latest = await fetchPublicCards();
-                if (JSON.stringify(latest) !== JSON.stringify(videoCards)) {
-                    videoCards = latest;
-                    if (!videoCards.some(c => c.id === activeCardId)) {
-                        playCard(videoCards[0]);
-                    } else {
-                        renderCards();
-                    }
-                    showToast('Novos cards disponíveis na transmissão.');
-                }
-            } catch (_) {}
-        }
-
         // Inicialização
-        (async function init() {
-            videoCards = loadLocalCards();
-            playCard(videoCards[0]);
-
-            if (PUBLIC_CARDS_API_URL) {
-                try {
-                    const shared = await fetchPublicCards();
-                    videoCards = shared;
-                    const active = videoCards.find(c => c.id === activeCardId) || videoCards[0];
-                    playCard(active);
-                } catch (err) {
-                    console.warn('Falha ao carregar lista pública inicial:', err);
-                }
-                setInterval(pollPublicCards, PUBLIC_POLL_MS);
-            }
-        })();
+        loadCards();
+        playCard(videoCards[0]);
     </script>
 </body>
 </html>

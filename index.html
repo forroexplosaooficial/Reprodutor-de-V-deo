@@ -97,17 +97,14 @@
         </div>
 
         <!-- Camada de Vídeo Nativo / HLS (MP4, WebM, M3U8) -->
-        <video id="nativeVideoPlayer" class="hidden absolute inset-0 w-full h-full object-cover z-0 bg-black" playsinline controls></video>
+        <video id="nativeVideoPlayer" class="hidden absolute inset-0 w-full h-full object-cover z-0 bg-black" autoplay playsinline controls></video>
 
-        <!-- Camada de Vídeo YouTube (Iframe) -->
+        <!-- Camada de Rádio / Áudio Nativo -->
+        <audio id="radioAudioPlayer" class="hidden" autoplay controls></audio>
+
+        <!-- Camada de Vídeo / Player Externo (YouTube / Web Player) -->
         <div id="youtubeContainer" class="hidden absolute inset-0 w-full h-full z-0 bg-black">
-            <iframe
-    id="youtubeIframe"
-    class="w-full h-full border-0"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-    allowfullscreen
-    referrerpolicy="strict-origin-when-cross-origin">
-</iframe>
+            <iframe id="youtubeIframe" class="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
         </div>
 
         <!-- Camada Transparente de Interceptação (Modo Cinema) -->
@@ -115,7 +112,7 @@
 
         <!-- Gradientes superior e inferior -->
         <div id="topGradient" class="hud-layer pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/65 via-black/25 to-transparent z-10"></div>
-        <div id="bottomGradient" class="hud-layer pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10"></div>
+        <div id="bottomGradient" class="hud-layer pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/90 via-black/55 to-transparent z-10"></div>
 
         <!-- Barra Superior Interna -->
         <div id="topHudBar" class="hud-layer relative z-20 flex items-center justify-between gap-2 px-4 pt-4 sm:px-7 sm:pt-6">
@@ -133,6 +130,14 @@
 
             <!-- Grupo de Controles Superiores Direitos -->
             <div class="flex items-center gap-1.5 sm:gap-2">
+                <!-- Botão Resetar Cards Padrão -->
+                <button id="resetCardsBtn" type="button" title="Resetar para os cards padrão" aria-label="Resetar para os cards padrão" class="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs sm:text-sm font-semibold px-2.5 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    <span class="hidden md:inline">Resetar</span>
+                </button>
+
                 <!-- Botão Adicionar Novo Card -->
                 <button id="openAddModalBtn" type="button" title="Adicionar novo card de vídeo" class="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs sm:text-sm font-semibold px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -168,8 +173,14 @@
             </div>
         </div>
 
-        <!-- Faixa Horizontal Rolável de Cards na Parte Inferior Interna -->
-        <div id="bottomHudBar" class="hud-layer relative z-20 px-4 pb-4 sm:px-7 sm:pb-6 w-full">
+        <!-- Faixa Horizontal de Filtros e Cards na Parte Inferior Interna -->
+        <div id="bottomHudBar" class="hud-layer relative z-20 px-4 pb-4 sm:px-7 sm:pb-6 w-full space-y-2">
+            <!-- Barra de Filtro por Categoria -->
+            <div id="categoryFilterBar" class="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                <!-- Botões de categoria renderizados via JavaScript -->
+            </div>
+
+            <!-- Faixa Horizontal Rolável de Cards -->
             <div id="cardsTrack" class="cards-scroller flex items-center gap-3 sm:gap-4 overflow-x-auto pb-1.5 pt-1">
                 <!-- Os cards são renderizados dinamicamente via JavaScript -->
             </div>
@@ -199,13 +210,24 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label for="cardTitleInput" class="block text-xs font-semibold text-white/75 mb-1">Título do Canal ou Vídeo</label>
-                        <input id="cardTitleInput" type="text" required placeholder="Ex: Canal Ao Vivo HD" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="sm:col-span-2">
+                            <label for="cardTitleInput" class="block text-xs font-semibold text-white/75 mb-1">Título do Canal ou Vídeo</label>
+                            <input id="cardTitleInput" type="text" required placeholder="Ex: Canal Ao Vivo HD" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                        </div>
+                        <div>
+                            <label for="cardCategoryInput" class="block text-xs font-semibold text-white/75 mb-1">Categoria</label>
+                            <select id="cardCategoryInput" class="w-full bg-[#1a2230] border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3 py-2 text-sm text-white transition">
+                                <option value="Forró">Forró</option>
+                                <option value="Ao Vivo">Ao Vivo</option>
+                                <option value="Clipes">Clipes</option>
+                                <option value="Geral">Geral</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div>
-                        <label for="cardUrlInput" class="block text-xs font-semibold text-white/75 mb-1">Link da URL (M3U8, MP4, WebM ou YouTube)</label>
+                        <label for="cardUrlInput" class="block text-xs font-semibold text-white/75 mb-1">Link da URL (M3U8, MP4, WebM, Rádio ou YouTube)</label>
                         <input id="cardUrlInput" type="url" required placeholder="https://.../playlist.m3u8 ou YouTube" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
                     </div>
 
@@ -267,69 +289,77 @@
     </div>
 
     <script>
-        // Credenciais do dono do aplicativo para criar e remover cards
         const OWNER_CREDENTIALS = {
             username: 'admin',
             password: '1540'
         };
 
-        const STORAGE_KEY = 'live_player_video_cards_v2';
+        const STORAGE_KEY = 'live_player_video_cards_v4_radio_explosao';
+        const CATEGORIES = ['Todos', 'Forró', 'Ao Vivo', 'Clipes', 'Geral'];
 
         const defaultCards = [
             {
                 id: 'card-1',
                 title: 'Briga mas volta',
+                category: 'Forró',
                 url: 'https://youtu.be/RFeqSiHGNfE?is=xXtxCgemNoVMLTyV'
             },
             {
                 id: 'card-2',
-                title: 'Só ficar - Forró Explosão',
-                url: 'https://youtu.be/43FhQuzQXko?is=VFPdk-TK89FJDv2w'
+                title: 'Rádio Explosão - Ao Vivo',
+                category: 'Ao Vivo',
+                url: 'https://player.xcast.com.br/player-app-multi-plataforma/11904'
             },
             {
                 id: 'card-3',
                 title: 'Sabe quando vai me ver - Forró Explosão',
+                category: 'Forró',
                 url: 'https://youtu.be/zAE87HGFkYg?is=BdoUlBdjT_GClfB3'
             },
-            {   id: 'card-4',
+            {
+                id: 'card-4',
                 title: 'Me deixa em paz - Forró Explosão',
+                category: 'Forró',
                 url: 'https://youtu.be/U0W25VaFsWI?is=EuscxpEGUO511d8v'
             },
-            {   id: 'card-5',
+            {
+                id: 'card-5',
                 title: 'O nosso forró é bom demais - Forró Explosão',
+                category: 'Forró',
                 url: 'https://youtu.be/B7x-7L2S6gM?is=zjJDPZBAkT0aKd06'
             }
         ];
 
         let videoCards = [];
         let activeCardId = 'card-1';
+        let activeCategory = 'Todos';
         let isUiHidden = false;
         let hlsInstance = null;
         let pendingRemoveCardId = null;
 
-        // Referências do DOM
         const mainPlayerContainer = document.getElementById('mainPlayerContainer');
+        const categoryFilterBar = document.getElementById('categoryFilterBar');
         const cardsTrack = document.getElementById('cardsTrack');
         const ambientFallback = document.getElementById('ambientFallback');
         const nativeVideoPlayer = document.getElementById('nativeVideoPlayer');
+        const radioAudioPlayer = document.getElementById('radioAudioPlayer');
         const youtubeContainer = document.getElementById('youtubeContainer');
         const youtubeIframe = document.getElementById('youtubeIframe');
         const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 
-        // Referências da Interface Sobreposta (HUD) e Botões
         const topHudBar = document.getElementById('topHudBar');
         const bottomHudBar = document.getElementById('bottomHudBar');
         const topGradient = document.getElementById('topGradient');
         const bottomGradient = document.getElementById('bottomGradient');
         const restoreUiOverlay = document.getElementById('restoreUiOverlay');
 
+        const resetCardsBtn = document.getElementById('resetCardsBtn');
         const hideUiBtn = document.getElementById('hideUiBtn');
         const pipBtn = document.getElementById('pipBtn');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
         const fullscreenExpandIcon = document.getElementById('fullscreenExpandIcon');
         const fullscreenCompressIcon = document.getElementById('fullscreenCompressIcon');
 
-        // Referências do Modal de Criação
         const addCardModal = document.getElementById('addCardModal');
         const addCardModalBox = document.getElementById('addCardModalBox');
         const openAddModalBtn = document.getElementById('openAddModalBtn');
@@ -339,10 +369,10 @@
         const ownerUserInput = document.getElementById('ownerUserInput');
         const ownerPassInput = document.getElementById('ownerPassInput');
         const cardTitleInput = document.getElementById('cardTitleInput');
+        const cardCategoryInput = document.getElementById('cardCategoryInput');
         const cardUrlInput = document.getElementById('cardUrlInput');
         const formErrorMsg = document.getElementById('formErrorMsg');
 
-        // Referências do Modal de Remoção
         const removeAuthModal = document.getElementById('removeAuthModal');
         const closeRemoveModalBtn = document.getElementById('closeRemoveModalBtn');
         const cancelRemoveModalBtn = document.getElementById('cancelRemoveModalBtn');
@@ -358,20 +388,38 @@
             return username === OWNER_CREDENTIALS.username && password === OWNER_CREDENTIALS.password;
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function inferCategory(card) {
+            if (card.category && CATEGORIES.includes(card.category) && card.category !== 'Todos') {
+                return card.category;
+            }
+            if (/r[aá]dio explos[aã]o|ao vivo/i.test(card.title || '') || isHlsStream(card.url)) return 'Ao Vivo';
+            if (/forr[oó]|piseiro/i.test(card.title || '')) return 'Forró';
+            return 'Geral';
+        }
+
         function loadCards() {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        videoCards = parsed;
+                        videoCards = parsed.map(c => ({ ...c, category: inferCategory(c) }));
                         return;
                     }
                 }
             } catch (e) {
                 console.warn('Falha ao ler localStorage:', e);
             }
-            videoCards = [...defaultCards];
+            videoCards = defaultCards.map(c => ({ ...c }));
         }
 
         function saveCards() {
@@ -381,6 +429,19 @@
                 console.warn('Falha ao salvar no localStorage:', e);
             }
         }
+
+        function resetToDefaultCards() {
+            videoCards = defaultCards.map(c => ({ ...c }));
+            activeCategory = 'Todos';
+            saveCards();
+            playCard(videoCards[0]);
+            showToast('Cards restaurados para o padrão.');
+        }
+
+        resetCardsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetToDefaultCards();
+        });
 
         function extractYouTubeId(url) {
             if (!url) return null;
@@ -394,6 +455,26 @@
             return /\.m3u8(\?.*)?$/i.test(url.trim());
         }
 
+        function isDirectAudioStream(url) {
+            if (!url) return false;
+            return /\.(mp3|aac|ogg|opus|wav)(\?.*)?$/i.test(url.trim());
+        }
+
+        function attemptAutoplay(mediaEl, labelForToast = 'reprodução') {
+            mediaEl.muted = false;
+            const playPromise = mediaEl.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    mediaEl.muted = true;
+                    mediaEl.play().then(() => {
+                        showToast(`Autoplay iniciado sem áudio (toque para ativar o som da ${labelForToast}).`);
+                    }).catch(() => {
+                        showToast(`Toque para iniciar a ${labelForToast}.`);
+                    });
+                });
+            }
+        }
+
         let toastTimeout;
         function showToast(message) {
             toastNotification.textContent = message;
@@ -404,9 +485,6 @@
             }, 3200);
         }
 
-        // =========================================================================
-        // 1) OCULTAR / RESTAURAR INTERFACE (MODO CINEMA)
-        // =========================================================================
         function hideInterface() {
             if (isUiHidden) return;
             isUiHidden = true;
@@ -444,9 +522,6 @@
         restoreUiOverlay.addEventListener('touchend', restoreInterface, { passive: false });
         restoreUiOverlay.addEventListener('click', restoreInterface);
 
-        // =========================================================================
-        // 2) PICTURE-IN-PICTURE (PiP)
-        // =========================================================================
         async function togglePictureInPicture() {
             const isNativeVideoVisible = !nativeVideoPlayer.classList.contains('hidden');
             const isYouTubeVisible = !youtubeContainer.classList.contains('hidden');
@@ -496,9 +571,6 @@
             pipBtn.classList.add('bg-white/15');
         });
 
-        // =========================================================================
-        // 3) TELA CHEIA (FULLSCREEN)
-        // =========================================================================
         function updateFullscreenIcons() {
             const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
             if (isFs) {
@@ -542,9 +614,6 @@
         document.addEventListener('fullscreenchange', updateFullscreenIcons);
         document.addEventListener('webkitfullscreenchange', updateFullscreenIcons);
 
-        // =========================================================================
-        // REPRODUÇÃO (YOUTUBE, HLS .M3U8 E MP4/WEBM) E GERENCIAMENTO DOS CARDS
-        // =========================================================================
         function destroyHls() {
             if (hlsInstance) {
                 hlsInstance.destroy();
@@ -566,12 +635,16 @@
             nativeVideoPlayer.load();
             nativeVideoPlayer.classList.add('hidden');
 
+            radioAudioPlayer.pause();
+            radioAudioPlayer.removeAttribute('src');
+            radioAudioPlayer.load();
+
             youtubeIframe.src = '';
             youtubeContainer.classList.add('hidden');
 
             if (!card.url || card.isAmbientDefault) {
                 ambientFallback.classList.remove('opacity-0');
-                renderCards();
+                renderFiltersAndCards();
                 return;
             }
 
@@ -580,7 +653,7 @@
             if (ytId) {
                 ambientFallback.classList.add('opacity-0');
                 youtubeContainer.classList.remove('hidden');
-                youtubeIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&enablejsapi=1`;
+                youtubeIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
             } else if (isHlsStream(card.url)) {
                 ambientFallback.classList.add('opacity-0');
                 nativeVideoPlayer.classList.remove('hidden');
@@ -594,9 +667,7 @@
                     hlsInstance.attachMedia(nativeVideoPlayer);
 
                     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-                        nativeVideoPlayer.play().catch(() => {
-                            showToast('Toque no vídeo para iniciar a transmissão.');
-                        });
+                        attemptAutoplay(nativeVideoPlayer, 'transmissão');
                     });
 
                     hlsInstance.on(Hls.Events.ERROR, (event, data) => {
@@ -619,26 +690,29 @@
                 } else if (nativeVideoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
                     nativeVideoPlayer.src = card.url;
                     nativeVideoPlayer.addEventListener('loadedmetadata', () => {
-                        nativeVideoPlayer.play().catch(() => {
-                            showToast('Toque no vídeo para iniciar a transmissão.');
-                        });
+                        attemptAutoplay(nativeVideoPlayer, 'transmissão');
                     }, { once: true });
                 } else {
                     showToast('Seu navegador não suporta transmissões HLS (.m3u8).');
                 }
+            } else if (isDirectAudioStream(card.url)) {
+                ambientFallback.classList.remove('opacity-0');
+                radioAudioPlayer.src = card.url;
+                attemptAutoplay(radioAudioPlayer, 'Rádio Explosão');
+            } else if (/player\.xcast\.com\.br/i.test(card.url)) {
+                ambientFallback.classList.add('opacity-0');
+                youtubeContainer.classList.remove('hidden');
+                youtubeIframe.src = card.url;
             } else {
                 ambientFallback.classList.add('opacity-0');
                 nativeVideoPlayer.classList.remove('hidden');
                 nativeVideoPlayer.src = card.url;
-                nativeVideoPlayer.play().catch(() => {
-                    showToast('Clique no vídeo para iniciar a reprodução.');
-                });
+                attemptAutoplay(nativeVideoPlayer, 'reprodução');
             }
 
-            renderCards();
+            renderFiltersAndCards();
         }
 
-        // Solicita usuário e senha do dono antes de remover um card
         function requestRemoveCard(event, id) {
             event.stopPropagation();
             if (videoCards.length <= 1) {
@@ -692,23 +766,63 @@
             if (activeCardId === idToRemove) {
                 playCard(videoCards[0]);
             } else {
-                renderCards();
+                renderFiltersAndCards();
             }
             showToast('Card removido.');
         });
 
+        function renderFilters() {
+            categoryFilterBar.innerHTML = '';
+
+            CATEGORIES.forEach((category) => {
+                const isSelected = activeCategory === category;
+                const count = category === 'Todos'
+                    ? videoCards.length
+                    : videoCards.filter(c => inferCategory(c) === category).length;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer border ${
+                    isSelected
+                        ? 'bg-[#e11d2b] text-white border-red-400 shadow-sm'
+                        : 'bg-black/55 hover:bg-white/15 text-white/80 border-white/15'
+                }`;
+                btn.innerHTML = `<span>${escapeHtml(category)}</span><span class="opacity-70 text-[10px]">${count}</span>`;
+                btn.addEventListener('click', () => {
+                    activeCategory = category;
+                    renderFiltersAndCards();
+                });
+                categoryFilterBar.appendChild(btn);
+            });
+        }
+
         function renderCards() {
             cardsTrack.innerHTML = '';
 
-            videoCards.forEach((card) => {
+            const filteredCards = activeCategory === 'Todos'
+                ? videoCards
+                : videoCards.filter(c => inferCategory(c) === activeCategory);
+
+            if (filteredCards.length === 0) {
+                const emptyNotice = document.createElement('div');
+                emptyNotice.className = 'flex-shrink-0 px-4 py-3 rounded-2xl bg-black/55 border border-white/15 text-white/75 text-xs';
+                emptyNotice.textContent = `Nenhum card na categoria "${activeCategory}".`;
+                cardsTrack.appendChild(emptyNotice);
+            }
+
+            filteredCards.forEach((card) => {
                 const isActive = card.id === activeCardId;
                 const ytId = extractYouTubeId(card.url);
                 const isHls = isHlsStream(card.url);
+                const isRadioStream = isDirectAudioStream(card.url) || /player\.xcast\.com\.br/i.test(card.url || '');
                 const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg` : null;
+                const safeTitle = escapeHtml(card.title);
+                const category = inferCategory(card);
 
                 let sourceLabel = 'Sinal Ambiente';
                 if (ytId) sourceLabel = 'YouTube';
                 else if (isHls) sourceLabel = 'Stream Ao Vivo • HLS';
+                else if (isRadioStream) sourceLabel = 'Rádio Ao Vivo • A sua música toca aqui!';
                 else if (card.url) sourceLabel = 'Vídeo Direto';
 
                 const cardEl = document.createElement('div');
@@ -721,8 +835,8 @@
                 cardEl.onclick = () => playCard(card);
 
                 const mediaPreviewHTML = thumbUrl
-                    ? `<img src="${thumbUrl}" alt="${card.title}" onerror="this.style.display='none'" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300">`
-                    : `<div class="w-full h-full bg-gradient-to-br from-[#2a1c12] via-[#161e29] to-[#0b0f17]"></div>`;
+                    ? `<img src="${thumbUrl}" alt="${safeTitle}" onerror="this.style.display='none'" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300">`
+                    : `<div class="w-full h-full bg-gradient-to-br from-[#7f1d1d] via-[#2a1c12] to-[#0b0f17] flex items-center justify-center"><span class="text-[10px] font-extrabold tracking-widest uppercase text-red-300/90">${isRadioStream ? 'AO VIVO' : 'PLAYER'}</span></div>`;
 
                 cardEl.innerHTML = `
                     <div class="relative w-full h-16 sm:h-20 rounded-xl overflow-hidden bg-black/60 mb-2 flex items-center justify-center">
@@ -746,11 +860,11 @@
                         </button>
                     </div>
                     <div class="px-0.5">
-                        <p class="text-white text-xs sm:text-[13px] font-semibold truncate leading-snug" title="${card.title}">
-                            ${card.title}
+                        <p class="text-white text-xs sm:text-[13px] font-semibold truncate leading-snug" title="${safeTitle}">
+                            ${safeTitle}
                         </p>
                         <p class="text-white/55 text-[10px] truncate mt-0.5">
-                            ${sourceLabel}
+                            ${escapeHtml(category)} • ${sourceLabel}
                         </p>
                     </div>
                 `;
@@ -776,12 +890,17 @@
             cardsTrack.appendChild(quickAddCard);
         }
 
-        // Controles do Modal Interno de Criação
+        function renderFiltersAndCards() {
+            renderFilters();
+            renderCards();
+        }
+
         function openModal() {
             formErrorMsg.classList.add('hidden');
             ownerUserInput.value = '';
             ownerPassInput.value = '';
             cardTitleInput.value = '';
+            cardCategoryInput.value = 'Forró';
             cardUrlInput.value = '';
             addCardModal.classList.remove('hidden');
             addCardModal.scrollTop = 0;
@@ -809,6 +928,7 @@
             const username = ownerUserInput.value.trim();
             const password = ownerPassInput.value;
             const title = cardTitleInput.value.trim();
+            const category = cardCategoryInput.value;
             const url = cardUrlInput.value.trim();
 
             if (!hasOwnerAccess(username, password)) {
@@ -834,6 +954,7 @@
             const newCard = {
                 id: 'card-' + Date.now(),
                 title,
+                category,
                 url
             };
 
@@ -848,7 +969,6 @@
             }, 100);
         });
 
-        // Inicialização
         loadCards();
         playCard(videoCards[0]);
     </script>

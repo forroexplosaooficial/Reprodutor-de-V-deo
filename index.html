@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reprodutor de Vídeos — Rádio Explosão</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .player-aspect-box {
+            aspect-ratio: 16 / 8.5;
+            width: 100%;
+            max-width: 1000px;
+            max-height: 92vh;
+            border-radius: 24px;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45);
+            transition: border-radius 0.3s ease;
+        }
+
+        .player-aspect-box:fullscreen,
+        .player-aspect-box:-webkit-full-screen {
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            border-radius: 0 !important;
+        }
+
+        .cards-scroller::-webkit-scrollbar,
+        .modal-scroller::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        .cards-scroller::-webkit-scrollbar-track,
+        .modal-scroller::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 9999px;
+        }
+        .cards-scroller::-webkit-scrollbar-thumb,
+        .modal-scroller::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 9999px;
+        }
+        .cards-scroller::-webkit-scrollbar-thumb:hover,
+        .modal-scroller::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.45);
+        }
+
+        .modal-scroller {
+            max-height: 82vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+        }
+
+        .hub-scroll-area {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+        }
+
+        .ambient-backdrop {
+            background: radial-gradient(circle at 50% 42%, rgba(196, 128, 56, 0.52) 0%, rgba(112, 66, 28, 0.32) 34%, rgba(10, 16, 24, 0.96) 72%, #070b10 100%);
+        }
+
+        .hud-layer {
+            transition: opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1), transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .hud-hidden-top {
+            opacity: 0 !important;
+            transform: translateY(-14px);
+            pointer-events: none !important;
+        }
+        .hud-hidden-bottom {
+            opacity: 0 !important;
+            transform: translateY(18px);
+            pointer-events: none !important;
+        }
+        .hud-hidden-fade {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex items-center justify-center p-3 sm:p-6 select-none">
+
+    <div id="mainPlayerContainer" class="player-aspect-box relative overflow-hidden bg-[#070b10]">
+
+        <div id="ambientFallback" class="ambient-backdrop absolute inset-0 z-0 transition-opacity duration-500 flex items-center justify-center">
+            <div class="absolute inset-0 backdrop-blur-3xl opacity-90"></div>
+            <div id="audioStatusBadge" class="hidden relative z-10 px-5 py-3 rounded-2xl bg-black/55 border border-white/15 backdrop-blur-md text-center max-w-xs">
+                <p class="text-[11px] uppercase tracking-widest text-red-400 font-bold mb-1">Transmissão de Áudio</p>
+                <p id="audioStatusTitle" class="text-sm font-bold text-white truncate">Rádio Explosão</p>
+                <p class="text-xs text-white/65 mt-0.5">A sua música toca aqui!</p>
+            </div>
+        </div>
+
+        <video id="nativeVideoPlayer" class="hidden absolute inset-0 w-full h-full object-cover z-0 bg-black" autoplay playsinline controls></video>
+        <audio id="radioAudioPlayer" class="hidden" autoplay controls></audio>
+
+        <div id="youtubeContainer" class="hidden absolute inset-0 w-full h-full z-0 bg-black">
+            <iframe id="youtubeIframe" class="w-full h-full border-0" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+
+        <div id="radioTvStage" class="hidden absolute inset-0 z-10 bg-[#070b10] flex flex-col overflow-hidden">
+            <div id="liveVideoPane" class="relative w-full flex-1 min-h-[140px] bg-black flex items-center justify-center overflow-hidden">
+                <iframe id="radioTvEmbedIframe" class="hidden absolute inset-0 w-full h-full border-0 z-0" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+                <div id="restoreStageControlsOverlay" class="hidden absolute inset-0 z-20 cursor-pointer" title="Toque na tela para reexibir as configurações do YouTube"></div>
+
+                <div id="hubControlsWrapper" class="cards-scroller hub-scroll-area relative z-20 w-full h-full overflow-y-auto pointer-events-none pt-14 pb-3 px-4 sm:pt-16 sm:px-7">
+                    <div class="w-full max-w-2xl mx-auto flex flex-col gap-2">
+                        <div id="stageTopActions" class="hud-layer pointer-events-auto flex flex-wrap items-center justify-between gap-2 bg-black/75 backdrop-blur-md border border-white/15 rounded-xl px-3 py-2 shadow-lg">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="inline-flex items-center gap-1 bg-[#e11d2b] text-white text-[10px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full flex-shrink-0">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                                    AO VIVO
+                                </span>
+                                <span id="radioTvModeBadge" class="text-xs font-semibold text-white truncate">Rádio Explosão &amp; TV Online</span>
+                                <span id="ytChannelPill" class="hidden px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-200 border border-red-400/30 truncate">Canal YT Conectado</span>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <button id="toggleBelowChatBtn" type="button" class="inline-flex items-center gap-1 bg-[#e11d2b] hover:bg-[#c81724] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-red-400/30 transition cursor-pointer" title="Abrir ou fechar o chat abaixo do vídeo">
+                                    <span id="toggleBelowChatLabel">Fechar Chat</span>
+                                </button>
+                                <a id="openYtExternalLink" href="#" target="_blank" rel="noopener noreferrer" class="hidden inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-white/10 transition">
+                                    <span>Abrir no YT</span>
+                                </a>
+                                <button id="openYtLoginBtn" type="button" class="inline-flex items-center gap-1 bg-red-600/85 hover:bg-red-600 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-red-400/30 transition cursor-pointer" title="Abrir login e transmissão ao vivo no YouTube">
+                                    <span>Login YouTube</span>
+                                </button>
+                                <button id="reloadLiveStreamBtn" type="button" class="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-white/10 transition cursor-pointer" title="Buscar e reconectar live do YouTube">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                    </svg>
+                                    <span>Buscar Live</span>
+                                </button>
+                                <button id="hideStageControlsBtn" type="button" title="Ocultar configurações do YouTube" aria-label="Ocultar configurações do YouTube" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/10 transition cursor-pointer">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="stageYouTubeSettingsPanel" class="hud-layer pointer-events-auto space-y-2 bg-black/80 backdrop-blur-md border border-white/15 rounded-xl p-2.5 sm:p-3 shadow-lg">
+                            <div class="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-white/10">
+                                <span class="text-[11px] font-bold text-white/90">Configurações do Canal (Acesso do Dono)</span>
+                                <span id="ytApiStatusLabel" class="text-[10px] text-white/60">API: Não configurada</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                <input id="hubOwnerUserInput" type="text" autocomplete="username" placeholder="Usuário do dono" class="bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-white/40 transition">
+                                <input id="hubOwnerPassInput" type="password" autocomplete="current-password" placeholder="Senha do dono" class="bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-white/40 transition">
+                            </div>
+                            <p id="hubSettingsAuthError" class="hidden text-[10px] text-red-400 font-semibold"></p>
+
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <button type="button" id="triggerAutoLiveNowBtn" class="px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition cursor-pointer">
+                                    Detectar Live Agora
+                                </button>
+                                <button type="button" id="toggleAutoLiveBtn" class="px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 transition cursor-pointer">
+                                    Auto-Live: Ligado
+                                </button>
+                            </div>
+
+                            <form id="ytChannelConfigForm" class="flex items-center gap-1.5">
+                                <input id="ytChannelInput" type="text" placeholder="@handle, UC..., link da live ou watch?v=..." class="flex-1 min-w-0 bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-white/40 transition">
+                                <button type="submit" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-[#e11d2b] hover:bg-[#c81724] text-white transition cursor-pointer flex-shrink-0">
+                                    Salvar Canal
+                                </button>
+                            </form>
+
+                            <form id="ytApiKeyForm" class="flex items-center gap-1.5">
+                                <input id="ytApiKeyInput" type="password" placeholder="YouTube Data API v3 Key (AIza...)" class="flex-1 min-w-0 bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-white/40 transition">
+                                <button type="submit" class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/15 hover:bg-white/25 text-white transition cursor-pointer flex-shrink-0">
+                                    Salvar Key
+                                </button>
+                                <button type="button" id="clearYtApiKeyBtn" class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/10 hover:bg-red-600/60 text-white/80 hover:text-white transition cursor-pointer flex-shrink-0" title="Remover chave da API">
+                                    Limpar
+                                </button>
+                            </form>
+                        </div>
+
+                        <div id="liveStageEmptyHint" class="hidden pointer-events-auto text-center px-4 py-3 rounded-xl bg-black/75 border border-white/15 backdrop-blur-md">
+                            <p id="liveStageHintTitle" class="text-xs sm:text-sm font-bold text-white">Transmissão ao Vivo pelo YouTube</p>
+                            <p id="liveStageHintSubtext" class="text-[11px] text-white/65 mt-1">Salve sua YouTube Data API Key e o @handle ou ID UC... para detectar a live ativa automaticamente.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="belowLiveChatPanel" class="hud-layer relative z-20 w-full h-36 sm:h-44 bg-[#0d121a]/95 border-t border-white/15 flex flex-col flex-shrink-0 pb-16 sm:pb-20">
+                <div class="flex items-center justify-between gap-2 px-3 sm:px-5 py-1.5 bg-black/70 border-b border-white/10 flex-shrink-0">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="inline-flex items-center gap-1 bg-[#e11d2b] text-white text-[9px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full flex-shrink-0">
+                            CHAT
+                        </span>
+                        <span id="belowChatTitle" class="text-[11px] font-bold text-white truncate">Chat ao Vivo</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                        <a id="belowChatExternalLink" href="#" target="_blank" rel="noopener noreferrer" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition">
+                            Abrir Chat
+                        </a>
+                        <button id="closeBelowChatBtn" type="button" class="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-white/15 hover:bg-red-600 text-white transition cursor-pointer">
+                            Fechar Chat
+                        </button>
+                    </div>
+                </div>
+                <div class="relative flex-1 w-full h-full bg-[#111827]">
+                    <iframe id="belowChatIframe" class="w-full h-full border-0" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <div id="restoreUiOverlay" class="hidden absolute inset-0 z-30 cursor-pointer bg-transparent" title="Toque ou clique para mostrar os controles"></div>
+
+        <div id="topGradient" class="hud-layer pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/65 via-black/25 to-transparent z-10"></div>
+        <div id="bottomGradient" class="hud-layer pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/95 via-black/75 to-transparent z-20"></div>
+
+        <div id="topHudBar" class="hud-layer absolute inset-x-0 top-0 z-30 flex-shrink-0 flex items-center justify-between gap-2 px-4 pt-3 sm:px-7 sm:pt-4 min-w-0 w-full">
+            <div class="inline-flex items-center gap-1.5 bg-[#e11d2b] text-white font-extrabold tracking-wider text-[10px] sm:text-xs px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl shadow-lg flex-shrink-0">
+                <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-white animate-pulse"></span>
+                <span>VÍDEOS &amp; AO VIVO</span>
+            </div>
+
+            <div id="nowPlayingBadge" class="hidden lg:flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/45 backdrop-blur-md border border-white/10 text-white/90 text-xs font-medium max-w-xs truncate">
+                <span class="text-white/50">Reproduzindo:</span>
+                <span id="nowPlayingTitle" class="truncate font-semibold text-white">Carregando...</span>
+            </div>
+
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <button id="resetCardsBtn" type="button" title="Resetar para os cards padrão" aria-label="Resetar para os cards padrão" class="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs sm:text-sm font-semibold px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl sm:rounded-2xl backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    <span class="hidden md:inline">Resetar</span>
+                </button>
+
+                <button id="openAddModalBtn" type="button" title="Adicionar novo card de vídeo" class="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs sm:text-sm font-semibold px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl sm:rounded-2xl backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span class="hidden sm:inline">Adicionar Card</span>
+                </button>
+
+                <button id="hideUiBtn" type="button" title="Ocultar interface (Modo Cinema)" aria-label="Ocultar interface" class="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                </button>
+
+                <button id="pipBtn" type="button" title="Picture-in-Picture (Janela Flutuante)" aria-label="Picture-in-Picture" class="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg class="w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="14" rx="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <rect x="11" y="10" width="8" height="6" rx="1.2" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
+
+                <button id="fullscreenBtn" type="button" title="Tela Cheia" aria-label="Tela Cheia" class="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white backdrop-blur-md border border-white/15 transition-all cursor-pointer shadow-md">
+                    <svg id="fullscreenExpandIcon" class="w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                    <svg id="fullscreenCompressIcon" class="hidden w-4 h-4 sm:w-[18px] sm:h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="bottomHudBar" class="hud-layer absolute inset-x-0 bottom-0 z-30 flex-shrink-0 min-w-0 w-full px-4 pb-3 sm:px-7 sm:pb-4 bg-[#070b10]/90 backdrop-blur-md border-t border-white/10">
+            <div id="cardsTrack" class="cards-scroller flex items-center gap-3 sm:gap-4 min-w-0 w-full overflow-x-auto pb-1 pt-1.5"></div>
+        </div>
+
+        <div id="addCardModal" class="hidden absolute inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 transition-opacity overflow-y-auto">
+            <div id="addCardModalBox" class="modal-scroller w-full max-w-md bg-[#121721]/95 border border-white/15 rounded-3xl p-5 sm:p-6 shadow-2xl text-white my-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base sm:text-lg font-bold tracking-tight">Adicionar Novo Card</h2>
+                    <button id="closeAddModalBtn" type="button" class="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition cursor-pointer" title="Fechar">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form id="addCardForm" class="space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="ownerUserInput" class="block text-xs font-semibold text-white/75 mb-1">Usuário do Dono</label>
+                            <input id="ownerUserInput" type="text" required autocomplete="username" placeholder="Usuário" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                        </div>
+                        <div>
+                            <label for="ownerPassInput" class="block text-xs font-semibold text-white/75 mb-1">Senha do Dono</label>
+                            <input id="ownerPassInput" type="password" required autocomplete="current-password" placeholder="Senha" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="cardTitleInput" class="block text-xs font-semibold text-white/75 mb-1">Título do Canal ou Vídeo</label>
+                        <input id="cardTitleInput" type="text" required placeholder="Ex: Canal Ao Vivo HD" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                    </div>
+
+                    <div>
+                        <label for="cardUrlInput" class="block text-xs font-semibold text-white/75 mb-1">Link da URL (YouTube, M3U8, MP4, WebM ou Rádio)</label>
+                        <input id="cardUrlInput" type="url" required placeholder="https://youtube.com/... ou https://.../playlist.m3u8" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                    </div>
+
+                    <p id="formErrorMsg" class="hidden text-xs text-red-400 font-medium"></p>
+
+                    <div class="flex items-center justify-end gap-2.5 pt-2">
+                        <button type="button" id="cancelAddModalBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white/10 hover:bg-white/20 text-white/85 transition cursor-pointer">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="px-5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#e11d2b] hover:bg-[#c81724] text-white shadow-lg transition cursor-pointer">
+                            Salvar Card
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="removeAuthModal" class="hidden absolute inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 transition-opacity overflow-y-auto">
+            <div class="modal-scroller w-full max-w-sm bg-[#121721]/95 border border-white/15 rounded-3xl p-5 sm:p-6 shadow-2xl text-white my-auto">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-bold tracking-tight">Remover Card</h2>
+                    <button id="closeRemoveModalBtn" type="button" class="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition cursor-pointer" title="Fechar">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <p id="removeCardTargetLabel" class="text-xs text-white/70 mb-3.5 truncate"></p>
+
+                <form id="removeCardForm" class="space-y-3">
+                    <div>
+                        <label for="removeUserInput" class="block text-xs font-semibold text-white/75 mb-1">Usuário do Dono</label>
+                        <input id="removeUserInput" type="text" required autocomplete="username" placeholder="Usuário" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                    </div>
+
+                    <div>
+                        <label for="removePassInput" class="block text-xs font-semibold text-white/75 mb-1">Senha do Dono</label>
+                        <input id="removePassInput" type="password" required autocomplete="current-password" placeholder="Senha" class="w-full bg-white/10 border border-white/15 focus:border-red-500 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white placeholder-white/40 transition">
+                    </div>
+
+                    <p id="removeErrorMsg" class="hidden text-xs text-red-400 font-medium"></p>
+
+                    <div class="flex items-center justify-end gap-2.5 pt-2">
+                        <button type="button" id="cancelRemoveModalBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white/10 hover:bg-white/20 text-white/85 transition cursor-pointer">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-red-600 hover:bg-red-700 text-white shadow-lg transition cursor-pointer">
+                            Confirmar Remoção
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="toastNotification" class="hidden absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 bg-black/85 border border-white/15 text-white text-xs font-medium px-4 py-2 rounded-full shadow-xl backdrop-blur-md text-center max-w-[90%]"></div>
+    </div>
+
+    <script>
+        const OWNER_CREDENTIALS = {
+            username: 'admin',
+            password: '1540'
+        };
+
+        const RADIO_TV_CHANNEL_ID = 'UCRS4XJWFb5rD6t7O7dIUKRw';
+        const RADIO_TV_YT_LIVE_URL = `https://www.youtube.com/channel/${RADIO_TV_CHANNEL_ID}/live`;
+        const BGAMES_CHANNEL_ID = 'UCzKhe0U_wrGqyk49t8V2LZw';
+        const BGAMES_YT_LIVE_URL = `https://www.youtube.com/channel/${BGAMES_CHANNEL_ID}/live`;
+        const BGAMES_YT_API_KEY = 'AIzaSyDJeAdQ0YmozVgchQhm13l5ux-f-DqwRbQ';
+        const YOUTUBE_LOGIN_URL = `https://studio.youtube.com/channel/${RADIO_TV_CHANNEL_ID}/livestreaming`;
+        const STORAGE_KEY = 'radio_explosao_player_cards_v1';
+        const STATE_STORAGE_KEY = 'radio_explosao_player_state_v1';
+        const YT_API_KEY_STORAGE_KEY = 'radio_explosao_player_yt_api_key_v1';
+
+        const RADIO_TV_COVER_SVG = `
+            <div class="w-full h-full relative bg-gradient-to-br from-[#7f1d1d] via-[#3b1219] to-[#090e1a] flex flex-col items-center justify-center overflow-hidden">
+                <div class="flex items-center gap-2 text-amber-200 drop-shadow-[0_0_8px_rgba(248,113,113,0.55)]">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 14.5a5 5 0 017 0M6 12a8.5 8.5 0 0112 0" />
+                        <circle cx="12" cy="17" r="1.5" fill="currentColor" stroke="none" />
+                    </svg>
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                        <rect x="3" y="6" width="18" height="12" rx="2.5" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8M12 18v3" />
+                    </svg>
+                </div>
+                <span class="mt-0.5 text-[9px] font-extrabold tracking-widest uppercase text-red-200/95">RÁDIO &amp; TV</span>
+            </div>
+        `;
+
+        const BGAMES_COVER_SVG = `
+            <div class="w-full h-full relative bg-gradient-to-br from-[#2a0944] via-[#13193b] to-[#061c24] flex flex-col items-center justify-center overflow-hidden">
+                <svg class="w-8 h-8 text-cyan-300/90 drop-shadow-[0_0_8px_rgba(34,211,238,0.65)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="2.5" y="6" width="19" height="12" rx="4.5" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 10v4M6 12h4" />
+                    <circle cx="15.5" cy="10.5" r="1" fill="currentColor" stroke="none" />
+                    <circle cx="17.5" cy="13.5" r="1" fill="currentColor" stroke="none" />
+                </svg>
+                <span class="mt-0.5 text-[9px] font-extrabold tracking-widest uppercase text-cyan-200/95">BGAMES LIVE</span>
+            </div>
+        `;
+
+        const defaultCards = [
+            {
+                id: 'card-1',
+                title: 'Briga mas volta',
+                url: 'https://youtu.be/RFeqSiHGNfE?is=xXtxCgemNoVMLTyV'
+            },
+            {
+                id: 'card-2',
+                title: 'Rádio Explosão & TV Online',
+                url: RADIO_TV_YT_LIVE_URL,
+                ytChannelRef: RADIO_TV_YT_LIVE_URL,
+                autoLive: true,
+                liveHub: true,
+                theme: 'radio-tv'
+            },
+            {
+                id: 'card-3',
+                title: 'BGames',
+                url: BGAMES_YT_LIVE_URL,
+                ytChannelRef: BGAMES_YT_LIVE_URL,
+                ytApiKey: BGAMES_YT_API_KEY,
+                autoLive: true,
+                liveHub: true,
+                theme: 'games'
+            },
+            {
+                id: 'card-4',
+                title: 'Me deixa em paz - Forró Explosão',
+                url: 'https://youtu.be/U0W25VaFsWI?is=EuscxpEGUO511d8v'
+            },
+            {
+                id: 'card-5',
+                title: 'O nosso forró é bom demais - Forró Explosão',
+                url: 'https://youtu.be/B7x-7L2S6gM?is=zjJDPZBAkT0aKd06'
+            }
+        ];
+
+        let videoCards = [];
+        let activeCardId = 'card-1';
+        let isUiHidden = false;
+        let isStageControlsHidden = false;
+        let isBelowChatOpen = true;
+        let hlsInstance = null;
+        let pendingRemoveCardId = null;
+        let currentPlayingCard = null;
+        let currentActiveVideoId = '';
+        let ytApiKey = '';
+        let ytApiReady = false;
+        let ytPlayerInstance = null;
+        let pendingYtVideo = null;
+        const channelIdCache = new Map();
+        const liveVideoCache = new Map();
+
+        const mainPlayerContainer = document.getElementById('mainPlayerContainer');
+        const cardsTrack = document.getElementById('cardsTrack');
+        const ambientFallback = document.getElementById('ambientFallback');
+        const audioStatusBadge = document.getElementById('audioStatusBadge');
+        const audioStatusTitle = document.getElementById('audioStatusTitle');
+        const nativeVideoPlayer = document.getElementById('nativeVideoPlayer');
+        const radioAudioPlayer = document.getElementById('radioAudioPlayer');
+        const youtubeContainer = document.getElementById('youtubeContainer');
+        const youtubeIframe = document.getElementById('youtubeIframe');
+        const radioTvStage = document.getElementById('radioTvStage');
+        const restoreStageControlsOverlay = document.getElementById('restoreStageControlsOverlay');
+        const stageTopActions = document.getElementById('stageTopActions');
+        const stageYouTubeSettingsPanel = document.getElementById('stageYouTubeSettingsPanel');
+        const hideStageControlsBtn = document.getElementById('hideStageControlsBtn');
+        const radioTvModeBadge = document.getElementById('radioTvModeBadge');
+        const ytChannelPill = document.getElementById('ytChannelPill');
+        const toggleBelowChatBtn = document.getElementById('toggleBelowChatBtn');
+        const toggleBelowChatLabel = document.getElementById('toggleBelowChatLabel');
+        const belowLiveChatPanel = document.getElementById('belowLiveChatPanel');
+        const belowChatTitle = document.getElementById('belowChatTitle');
+        const belowChatExternalLink = document.getElementById('belowChatExternalLink');
+        const closeBelowChatBtn = document.getElementById('closeBelowChatBtn');
+        const belowChatIframe = document.getElementById('belowChatIframe');
+        const openYtExternalLink = document.getElementById('openYtExternalLink');
+        const radioTvEmbedIframe = document.getElementById('radioTvEmbedIframe');
+        const liveStageEmptyHint = document.getElementById('liveStageEmptyHint');
+        const liveStageHintTitle = document.getElementById('liveStageHintTitle');
+        const liveStageHintSubtext = document.getElementById('liveStageHintSubtext');
+        const openYtLoginBtn = document.getElementById('openYtLoginBtn');
+        const hubOwnerUserInput = document.getElementById('hubOwnerUserInput');
+        const hubOwnerPassInput = document.getElementById('hubOwnerPassInput');
+        const hubSettingsAuthError = document.getElementById('hubSettingsAuthError');
+        const triggerAutoLiveNowBtn = document.getElementById('triggerAutoLiveNowBtn');
+        const toggleAutoLiveBtn = document.getElementById('toggleAutoLiveBtn');
+        const ytApiStatusLabel = document.getElementById('ytApiStatusLabel');
+        const ytChannelConfigForm = document.getElementById('ytChannelConfigForm');
+        const ytChannelInput = document.getElementById('ytChannelInput');
+        const ytApiKeyForm = document.getElementById('ytApiKeyForm');
+        const ytApiKeyInput = document.getElementById('ytApiKeyInput');
+        const clearYtApiKeyBtn = document.getElementById('clearYtApiKeyBtn');
+        const reloadLiveStreamBtn = document.getElementById('reloadLiveStreamBtn');
+        const nowPlayingTitle = document.getElementById('nowPlayingTitle');
+
+        const topHudBar = document.getElementById('topHudBar');
+        const bottomHudBar = document.getElementById('bottomHudBar');
+        const topGradient = document.getElementById('topGradient');
+        const bottomGradient = document.getElementById('bottomGradient');
+        const restoreUiOverlay = document.getElementById('restoreUiOverlay');
+
+        const resetCardsBtn = document.getElementById('resetCardsBtn');
+        const hideUiBtn = document.getElementById('hideUiBtn');
+        const pipBtn = document.getElementById('pipBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const fullscreenExpandIcon = document.getElementById('fullscreenExpandIcon');
+        const fullscreenCompressIcon = document.getElementById('fullscreenCompressIcon');
+
+        const addCardModal = document.getElementById('addCardModal');
+        const openAddModalBtn = document.getElementById('openAddModalBtn');
+        const closeAddModalBtn = document.getElementById('closeAddModalBtn');
+        const cancelAddModalBtn = document.getElementById('cancelAddModalBtn');
+        const addCardForm = document.getElementById('addCardForm');
+        const ownerUserInput = document.getElementById('ownerUserInput');
+        const ownerPassInput = document.getElementById('ownerPassInput');
+        const cardTitleInput = document.getElementById('cardTitleInput');
+        const cardUrlInput = document.getElementById('cardUrlInput');
+        const formErrorMsg = document.getElementById('formErrorMsg');
+
+        const removeAuthModal = document.getElementById('removeAuthModal');
+        const closeRemoveModalBtn = document.getElementById('closeRemoveModalBtn');
+        const cancelRemoveModalBtn = document.getElementById('cancelRemoveModalBtn');
+        const removeCardForm = document.getElementById('removeCardForm');
+        const removeCardTargetLabel = document.getElementById('removeCardTargetLabel');
+        const removeUserInput = document.getElementById('removeUserInput');
+        const removePassInput = document.getElementById('removePassInput');
+        const removeErrorMsg = document.getElementById('removeErrorMsg');
+
+        const toastNotification = document.getElementById('toastNotification');
+
+        function hasOwnerAccess(username, password) {
+            return username === OWNER_CREDENTIALS.username && password === OWNER_CREDENTIALS.password;
+        }
+
+        function setHubSettingsError(msg = '') {
+            if (!hubSettingsAuthError) return;
+            if (msg) {
+                hubSettingsAuthError.textContent = msg;
+                hubSettingsAuthError.classList.remove('hidden');
+            } else {
+                hubSettingsAuthError.textContent = '';
+                hubSettingsAuthError.classList.add('hidden');
+            }
+        }
+
+        function verifyHubOwnerCredentials() {
+            const u = (hubOwnerUserInput.value || '').trim();
+            const p = hubOwnerPassInput.value || '';
+            if (!hasOwnerAccess(u, p)) {
+                setHubSettingsError('Acesso negado: informe usuário e senha válidos do dono para alterar as configurações.');
+                if (!u) hubOwnerUserInput.focus();
+                else hubOwnerPassInput.focus();
+                return false;
+            }
+            setHubSettingsError('');
+            return true;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function isSafeHttpUrl(rawUrl) {
+            if (!rawUrl || typeof rawUrl !== 'string') return false;
+            try {
+                const parsed = new URL(rawUrl.trim());
+                return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+            } catch (_) {
+                return false;
+            }
+        }
+
+        function isLiveHubCard(card) {
+            return Boolean(card && (card.id === 'card-2' || card.id === 'card-3' || card.liveHub === true));
+        }
+
+        function getEffectiveYtApiKey(card = null) {
+            const targetCard = card || getActiveHubCard();
+            if (targetCard && typeof targetCard.ytApiKey === 'string' && targetCard.ytApiKey.trim()) {
+                return targetCard.ytApiKey.trim();
+            }
+            if (targetCard && (targetCard.id === 'card-3' || targetCard.theme === 'games')) {
+                return BGAMES_YT_API_KEY;
+            }
+            return ytApiKey;
+        }
+
+        function extractYouTubeId(url) {
+            if (!url || typeof url !== 'string') return null;
+            const trimmed = url.trim();
+            if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
+            const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([\w-]{11})/i;
+            const match = trimmed.match(regExp);
+            return match ? match[1] : null;
+        }
+
+        function extractChannelId(rawInput) {
+            if (!rawInput || typeof rawInput !== 'string') return null;
+            const trimmed = rawInput.trim();
+            if (/^UC[\w-]{10,}$/i.test(trimmed)) return trimmed;
+            const match = trimmed.match(/(?:youtube\.com\/channel\/)(UC[\w-]{10,})/i);
+            return match ? match[1] : null;
+        }
+
+        function extractHandle(rawInput) {
+            if (!rawInput || typeof rawInput !== 'string') return null;
+            const trimmed = rawInput.trim();
+            if (/^@[\w.-]+$/.test(trimmed)) return trimmed;
+            const match = trimmed.match(/youtube\.com\/(@[\w.-]+)/i);
+            return match ? match[1] : null;
+        }
+
+        function buildExternalYouTubeLiveUrl(rawInput) {
+            if (!rawInput || typeof rawInput !== 'string') return '';
+            const val = rawInput.trim();
+            if (!val) return '';
+
+            const videoId = extractYouTubeId(val);
+            if (videoId) {
+                return `https://www.youtube.com/watch?v=${videoId}`;
+            }
+
+            const channelId = extractChannelId(val);
+            if (channelId) {
+                return `https://www.youtube.com/channel/${channelId}/live`;
+            }
+
+            const handle = extractHandle(val);
+            if (handle) {
+                return `https://www.youtube.com/${handle}/live`;
+            }
+
+            if (isSafeHttpUrl(val)) {
+                return val;
+            }
+
+            const normalizedHandle = val.startsWith('@') ? val : `@${val}`;
+            return `https://www.youtube.com/${normalizedHandle}/live`;
+        }
+
+        function buildYouTubeEmbedUrl(rawInput) {
+            const videoId = extractYouTubeId(rawInput);
+            if (!videoId) return '';
+            const origin = (window.location.origin && window.location.origin !== 'null')
+                ? `&origin=${encodeURIComponent(window.location.origin)}`
+                : '';
+            return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1${origin}`;
+        }
+
+        function buildBelowChatUrl(card) {
+            const videoId = currentActiveVideoId || extractYouTubeId(card && (card.ytChannelRef || card.url));
+            if (videoId) {
+                const domainParam = (window.location.hostname && window.location.hostname !== '')
+                    ? `&embed_domain=${encodeURIComponent(window.location.hostname)}`
+                    : '';
+                return `https://www.youtube.com/live_chat?v=${encodeURIComponent(videoId)}${domainParam}`;
+            }
+            const ref = (card && (card.ytChannelRef || card.url)) || '';
+            const channelId = extractChannelId(ref) || (card && card.id === 'card-3' ? BGAMES_CHANNEL_ID : RADIO_TV_CHANNEL_ID);
+            return `https://www.youtube.com/channel/${encodeURIComponent(channelId)}/live`;
+        }
+
+        function syncBelowChat(card) {
+            const targetCard = card || getActiveHubCard();
+            if (!targetCard) return;
+
+            const chatUrl = buildBelowChatUrl(targetCard);
+            const extUrl = buildExternalYouTubeLiveUrl(targetCard.ytChannelRef || targetCard.url);
+            belowChatTitle.textContent = `Chat ao Vivo — ${targetCard.title}`;
+            belowChatExternalLink.href = isSafeHttpUrl(extUrl) ? extUrl : chatUrl;
+            toggleBelowChatLabel.textContent = isBelowChatOpen ? 'Fechar Chat' : 'Abrir Chat';
+
+            if (isBelowChatOpen) {
+                belowLiveChatPanel.classList.remove('hidden');
+                if (belowChatIframe.src !== chatUrl) {
+                    belowChatIframe.src = chatUrl;
+                }
+            } else {
+                belowLiveChatPanel.classList.add('hidden');
+                belowChatIframe.src = '';
+            }
+        }
+
+        function setBelowChatOpen(open) {
+            isBelowChatOpen = Boolean(open);
+            syncBelowChat(getActiveHubCard());
+        }
+
+        toggleBelowChatBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setBelowChatOpen(!isBelowChatOpen);
+        });
+
+        closeBelowChatBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setBelowChatOpen(false);
+        });
+
+        function playNextCard() {
+            if (!Array.isArray(videoCards) || videoCards.length === 0) return;
+            const currentIndex = videoCards.findIndex(c => c.id === activeCardId);
+            const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % videoCards.length : 0;
+            playCard(videoCards[nextIndex]);
+        }
+
+        function bindYouTubePlayerEvents(iframeEl, expectedCardId) {
+            if (!ytApiReady || !window.YT || !window.YT.Player || !iframeEl) return;
+            try {
+                if (ytPlayerInstance && typeof ytPlayerInstance.destroy === 'function') {
+                    ytPlayerInstance.destroy();
+                    ytPlayerInstance = null;
+                }
+                ytPlayerInstance = new window.YT.Player(iframeEl, {
+                    events: {
+                        onStateChange: (event) => {
+                            if (event.data === window.YT.PlayerState.ENDED && activeCardId === expectedCardId) {
+                                playNextCard();
+                            }
+                        }
+                    }
+                });
+            } catch (_) {
+                // Fallback silencioso se o ambiente bloquear API postMessage do YT
+            }
+        }
+
+        window.onYouTubeIframeAPIReady = function () {
+            ytApiReady = true;
+            if (pendingYtVideo) {
+                const { iframeEl, cardId } = pendingYtVideo;
+                pendingYtVideo = null;
+                bindYouTubePlayerEvents(iframeEl, cardId);
+            }
+        };
+
+        function loadApiKey() {
+            try {
+                ytApiKey = (localStorage.getItem(YT_API_KEY_STORAGE_KEY) || '').trim();
+                ytApiKeyInput.value = ytApiKey;
+                updateApiStatusLabel();
+            } catch (e) {
+                console.warn('Falha ao ler chave da API:', e);
+            }
+        }
+
+        function saveApiKey(key) {
+            ytApiKey = (key || '').trim();
+            channelIdCache.clear();
+            liveVideoCache.clear();
+            try {
+                if (ytApiKey) {
+                    localStorage.setItem(YT_API_KEY_STORAGE_KEY, ytApiKey);
+                } else {
+                    localStorage.removeItem(YT_API_KEY_STORAGE_KEY);
+                }
+            } catch (e) {
+                console.warn('Falha ao salvar chave da API:', e);
+            }
+            updateApiStatusLabel();
+        }
+
+        function updateApiStatusLabel(card = null) {
+            if (!ytApiStatusLabel) return;
+            const targetCard = card || getActiveHubCard();
+            const effectiveKey = getEffectiveYtApiKey(targetCard);
+            if (effectiveKey) {
+                const isCardSpecificKey = Boolean(targetCard && (targetCard.id === 'card-3' || targetCard.theme === 'games' || targetCard.ytApiKey));
+                ytApiStatusLabel.textContent = isCardSpecificKey ? 'API: Chave BGames ativa' : 'API: Chave salva';
+                ytApiStatusLabel.className = 'text-[10px] text-emerald-300 font-semibold';
+            } else {
+                ytApiStatusLabel.textContent = 'API: Não configurada';
+                ytApiStatusLabel.className = 'text-[10px] text-white/60';
+            }
+        }
+
+        async function resolveChannelIdFromRef(rawRef, apiKey) {
+            const directId = extractChannelId(rawRef);
+            if (directId) return directId;
+
+            const handle = extractHandle(rawRef) || (rawRef && !isSafeHttpUrl(rawRef) ? (rawRef.startsWith('@') ? rawRef.trim() : `@${rawRef.trim()}`) : null);
+            if (!handle || !apiKey) return null;
+
+            const cacheKey = `${apiKey}:${handle.toLowerCase()}`;
+            if (channelIdCache.has(cacheKey)) {
+                return channelIdCache.get(cacheKey);
+            }
+
+            const url = `https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`;
+            const res = await fetch(url);
+            if (!res.ok) {
+                throw new Error(`Erro ao resolver canal (${res.status})`);
+            }
+            const data = await res.json();
+            const foundId = data.items && data.items[0] && data.items[0].id ? data.items[0].id : null;
+            if (foundId) {
+                channelIdCache.set(cacheKey, foundId);
+            }
+            return foundId;
+        }
+
+        async function fetchActiveLiveVideo(rawRef, forceRefresh = false, card = null) {
+            if (!rawRef) return null;
+            const directVideoId = extractYouTubeId(rawRef);
+            if (directVideoId) {
+                return { videoId: directVideoId, title: '' };
+            }
+
+            const effectiveApiKey = getEffectiveYtApiKey(card);
+            if (!effectiveApiKey) return null;
+
+            const channelId = await resolveChannelIdFromRef(rawRef, effectiveApiKey);
+            if (!channelId) return null;
+
+            const cacheKey = `${effectiveApiKey}:${channelId}`;
+            const cached = liveVideoCache.get(cacheKey);
+            if (!forceRefresh && cached && (Date.now() - cached.fetchedAt) < 60000) {
+                return cached.data;
+            }
+
+            const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${encodeURIComponent(channelId)}&eventType=live&type=video&maxResults=1&key=${encodeURIComponent(effectiveApiKey)}`;
+            const res = await fetch(searchUrl);
+            if (!res.ok) {
+                throw new Error(`YouTube API retornou ${res.status}`);
+            }
+            const data = await res.json();
+            const item = data.items && data.items[0];
+            const videoId = item && item.id && item.id.videoId ? item.id.videoId : null;
+            const liveTitle = item && item.snippet && item.snippet.title ? item.snippet.title : '';
+            const result = videoId ? { videoId, title: liveTitle } : null;
+
+            liveVideoCache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+            return result;
+        }
+
+        function getActiveHubCard() {
+            return videoCards.find(c => c.id === activeCardId && isLiveHubCard(c))
+                || videoCards.find(c => isLiveHubCard(c))
+                || null;
+        }
+
+        function syncHubControls(card) {
+            if (!card || !isLiveHubCard(card)) return;
+            setHubSettingsError('');
+            const ref = typeof card.ytChannelRef === 'string' ? card.ytChannelRef.trim() : '';
+            const autoLive = card.autoLive !== false;
+
+            ytChannelInput.value = ref;
+            ytApiKeyInput.value = getEffectiveYtApiKey(card);
+            updateApiStatusLabel(card);
+            toggleAutoLiveBtn.textContent = autoLive ? 'Auto-Live: Ligado' : 'Auto-Live: Manual';
+            toggleAutoLiveBtn.className = autoLive
+                ? 'px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 transition cursor-pointer'
+                : 'px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/10 hover:bg-white/20 text-white/75 border border-white/15 transition cursor-pointer';
+
+            if (ref) {
+                ytChannelPill.classList.remove('hidden');
+                ytChannelPill.textContent = autoLive ? `Auto-Live: ${ref}` : `Canal: ${ref}`;
+            } else {
+                ytChannelPill.classList.add('hidden');
+            }
+
+            const extUrl = buildExternalYouTubeLiveUrl(ref || card.url);
+            if (isSafeHttpUrl(extUrl)) {
+                openYtExternalLink.href = extUrl;
+                openYtExternalLink.classList.remove('hidden');
+            } else {
+                openYtExternalLink.href = '#';
+                openYtExternalLink.classList.add('hidden');
+            }
+
+            syncBelowChat(card);
+        }
+
+        function setStageControlsHidden(hidden, notify = false) {
+            isStageControlsHidden = Boolean(hidden);
+            if (isStageControlsHidden) {
+                stageYouTubeSettingsPanel.classList.add('hud-hidden-fade');
+                stageTopActions.classList.add('hud-hidden-fade');
+                restoreStageControlsOverlay.classList.remove('hidden');
+                if (notify) {
+                    showToast('Configurações ocultas. Toque na tela para reexibir.');
+                }
+            } else {
+                stageYouTubeSettingsPanel.classList.remove('hud-hidden-fade');
+                stageTopActions.classList.remove('hud-hidden-fade');
+                restoreStageControlsOverlay.classList.add('hidden');
+            }
+        }
+
+        hideStageControlsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setStageControlsHidden(true, true);
+        });
+
+        function handleStageTouchRestore(e) {
+            if (!isStageControlsHidden) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setStageControlsHidden(false, false);
+        }
+
+        restoreStageControlsOverlay.addEventListener('touchend', handleStageTouchRestore, { passive: false });
+        restoreStageControlsOverlay.addEventListener('click', handleStageTouchRestore);
+
+        radioTvStage.addEventListener('click', (e) => {
+            if (!isStageControlsHidden) return;
+            if (e.target.closest('button, a, input, form, iframe')) return;
+            e.stopPropagation();
+            setStageControlsHidden(false, false);
+        });
+
+        function saveState() {
+            try {
+                localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({
+                    activeCardId
+                }));
+            } catch (e) {
+                console.warn('Falha ao salvar estado:', e);
+            }
+        }
+
+        function loadCards() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        videoCards = parsed
+                            .filter(c => c && typeof c.title === 'string')
+                            .map(c => {
+                                const isHub = Boolean(c.liveHub || c.id === 'card-2' || c.id === 'card-3');
+                                const defaultChannelRef = c.id === 'card-2'
+                                    ? RADIO_TV_YT_LIVE_URL
+                                    : (c.id === 'card-3' ? BGAMES_YT_LIVE_URL : '');
+                                const defaultUrl = c.id === 'card-2'
+                                    ? RADIO_TV_YT_LIVE_URL
+                                    : (c.id === 'card-3' ? BGAMES_YT_LIVE_URL : (isSafeHttpUrl(c.url) ? c.url.trim() : ''));
+                                const cardApiKey = typeof c.ytApiKey === 'string' && c.ytApiKey.trim()
+                                    ? c.ytApiKey.trim()
+                                    : (c.id === 'card-3' ? BGAMES_YT_API_KEY : '');
+                                return {
+                                    id: String(c.id || ('card-' + Math.random().toString(36).slice(2, 8))),
+                                    title: c.title.trim() || 'Sem título',
+                                    url: defaultUrl,
+                                    ytChannelRef: typeof c.ytChannelRef === 'string' && c.ytChannelRef.trim()
+                                        ? c.ytChannelRef.trim()
+                                        : defaultChannelRef,
+                                    ytApiKey: cardApiKey,
+                                    autoLive: c.autoLive !== false,
+                                    liveHub: isHub,
+                                    theme: c.theme || (c.id === 'card-3' ? 'games' : (c.id === 'card-2' ? 'radio-tv' : undefined))
+                                };
+                            });
+                        if (videoCards.length > 0) return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Falha ao ler localStorage:', e);
+            }
+            videoCards = defaultCards.map(c => ({ ...c }));
+        }
+
+        function saveCards() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(videoCards));
+            } catch (e) {
+                console.warn('Falha ao salvar no localStorage:', e);
+            }
+        }
+
+        function resetToDefaultCards() {
+            videoCards = defaultCards.map(c => ({ ...c }));
+            saveCards();
+            playCard(videoCards[0]);
+            showToast('Cards restaurados para o padrão.');
+        }
+
+        resetCardsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetToDefaultCards();
+        });
+
+        function isHlsStream(url) {
+            if (!isSafeHttpUrl(url)) return false;
+            return /\.m3u8(\?.*)?$/i.test(url.trim());
+        }
+
+        function isDirectAudioStream(url) {
+            if (!isSafeHttpUrl(url)) return false;
+            return /\.(mp3|aac|ogg|opus|wav)(\?.*)?$/i.test(url.trim());
+        }
+
+        function isDirectVideoStream(url) {
+            if (!isSafeHttpUrl(url)) return false;
+            return /\.(mp4|webm|ogv|mov)(\?.*)?$/i.test(url.trim());
+        }
+
+        function attemptAutoplay(mediaEl, labelForToast = 'reprodução') {
+            mediaEl.muted = false;
+            const playPromise = mediaEl.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    mediaEl.muted = true;
+                    mediaEl.play().then(() => {
+                        showToast(`Autoplay sem áudio (toque para ativar o som da ${labelForToast}).`);
+                    }).catch(() => {
+                        showToast(`Toque para iniciar a ${labelForToast}.`);
+                    });
+                });
+            }
+        }
+
+        nativeVideoPlayer.addEventListener('ended', () => {
+            if (activeCardId) {
+                playNextCard();
+            }
+        });
+
+        radioAudioPlayer.addEventListener('ended', () => {
+            if (activeCardId) {
+                playNextCard();
+            }
+        });
+
+        let toastTimeout;
+        function showToast(message) {
+            toastNotification.textContent = message;
+            toastNotification.classList.remove('hidden');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toastNotification.classList.add('hidden');
+            }, 3400);
+        }
+
+        function hideInterface() {
+            if (isUiHidden) return;
+            isUiHidden = true;
+
+            topHudBar.classList.add('hud-hidden-top');
+            bottomHudBar.classList.add('hud-hidden-bottom');
+            topGradient.classList.add('hud-hidden-fade');
+            bottomGradient.classList.add('hud-hidden-fade');
+            setStageControlsHidden(true, false);
+
+            restoreUiOverlay.classList.remove('hidden');
+            showToast('Interface oculta. Toque na tela para reexibir.');
+        }
+
+        function restoreInterface(event) {
+            if (!isUiHidden) return;
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            isUiHidden = false;
+
+            topHudBar.classList.remove('hud-hidden-top');
+            bottomHudBar.classList.remove('hud-hidden-bottom');
+            topGradient.classList.remove('hud-hidden-fade');
+            bottomGradient.classList.remove('hud-hidden-fade');
+            setStageControlsHidden(false, false);
+
+            restoreUiOverlay.classList.add('hidden');
+        }
+
+        hideUiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideInterface();
+        });
+
+        restoreUiOverlay.addEventListener('touchend', restoreInterface, { passive: false });
+        restoreUiOverlay.addEventListener('click', restoreInterface);
+
+        async function togglePictureInPicture() {
+            const isNativeVideoVisible = !nativeVideoPlayer.classList.contains('hidden');
+            const isYouTubeVisible = !youtubeContainer.classList.contains('hidden');
+            const isLiveStageVisible = !radioTvStage.classList.contains('hidden');
+
+            if (isYouTubeVisible || isLiveStageVisible) {
+                showToast('O Picture-in-Picture está disponível para transmissões ao vivo (M3U8) e vídeos MP4.');
+                return;
+            }
+
+            if (!isNativeVideoVisible || (!nativeVideoPlayer.src && !hlsInstance)) {
+                showToast('Inicie uma transmissão ou vídeo para ativar o Picture-in-Picture.');
+                return;
+            }
+
+            if (!document.pictureInPictureEnabled && !nativeVideoPlayer.webkitSetPresentationMode) {
+                showToast('Seu navegador não suporta Picture-in-Picture.');
+                return;
+            }
+
+            try {
+                if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                } else if (nativeVideoPlayer.requestPictureInPicture) {
+                    await nativeVideoPlayer.requestPictureInPicture();
+                } else if (nativeVideoPlayer.webkitSetPresentationMode) {
+                    const mode = nativeVideoPlayer.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture';
+                    nativeVideoPlayer.webkitSetPresentationMode(mode);
+                }
+            } catch (err) {
+                console.warn('Erro ao alternar PiP:', err);
+                showToast('Dê play no vídeo antes de ativar o Picture-in-Picture.');
+            }
+        }
+
+        pipBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            togglePictureInPicture();
+        });
+
+        nativeVideoPlayer.addEventListener('enterpictureinpicture', () => {
+            pipBtn.classList.add('bg-[#e11d2b]', 'border-red-400');
+            pipBtn.classList.remove('bg-white/15');
+        });
+
+        nativeVideoPlayer.addEventListener('leavepictureinpicture', () => {
+            pipBtn.classList.remove('bg-[#e11d2b]', 'border-red-400');
+            pipBtn.classList.add('bg-white/15');
+        });
+
+        function updateFullscreenIcons() {
+            const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+            if (isFs) {
+                fullscreenExpandIcon.classList.add('hidden');
+                fullscreenCompressIcon.classList.remove('hidden');
+                fullscreenBtn.title = 'Sair da Tela Cheia';
+            } else {
+                fullscreenExpandIcon.classList.remove('hidden');
+                fullscreenCompressIcon.classList.add('hidden');
+                fullscreenBtn.title = 'Tela Cheia';
+            }
+        }
+
+        async function toggleFullscreen() {
+            const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+            try {
+                if (!isFs) {
+                    if (mainPlayerContainer.requestFullscreen) {
+                        await mainPlayerContainer.requestFullscreen();
+                    } else if (mainPlayerContainer.webkitRequestFullscreen) {
+                        await mainPlayerContainer.webkitRequestFullscreen();
+                    }
+                } else {
+                    if (document.exitFullscreen) {
+                        await document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        await document.webkitExitFullscreen();
+                    }
+                }
+            } catch (err) {
+                console.warn('Erro ao alternar tela cheia:', err);
+                showToast('Não foi possível ativar a tela cheia neste ambiente.');
+            }
+        }
+
+        fullscreenBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+        });
+
+        document.addEventListener('fullscreenchange', updateFullscreenIcons);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenIcons);
+
+        function destroyHls() {
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+        }
+
+        function attachHlsStream(url, videoElement) {
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                hlsInstance = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true
+                });
+                hlsInstance.loadSource(url);
+                hlsInstance.attachMedia(videoElement);
+
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    attemptAutoplay(videoElement, 'transmissão ao vivo');
+                });
+
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                showToast('Erro de conexão ou bloqueio CORS no sinal deste canal.');
+                                hlsInstance.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hlsInstance.recoverMediaError();
+                                break;
+                            default:
+                                destroyHls();
+                                showToast('Sinal indisponível no momento.');
+                                break;
+                        }
+                    }
+                });
+            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                videoElement.src = url;
+                videoElement.addEventListener('loadedmetadata', () => {
+                    attemptAutoplay(videoElement, 'transmissão ao vivo');
+                }, { once: true });
+            } else {
+                showToast('Seu navegador não suporta transmissões HLS (.m3u8).');
+            }
+        }
+
+        async function playCard(card, forceAutoLive = false) {
+            if (!card) return;
+            currentPlayingCard = card;
+            activeCardId = card.id;
+            currentActiveVideoId = extractYouTubeId(card.ytChannelRef || card.url) || '';
+            nowPlayingTitle.textContent = card.title;
+            saveState();
+
+            if (!isLiveHubCard(card)) {
+                belowChatIframe.src = '';
+            }
+
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture().catch(() => {});
+            }
+
+            if (ytPlayerInstance && typeof ytPlayerInstance.destroy === 'function') {
+                ytPlayerInstance.destroy();
+                ytPlayerInstance = null;
+            }
+            pendingYtVideo = null;
+
+            destroyHls();
+            nativeVideoPlayer.pause();
+            nativeVideoPlayer.removeAttribute('src');
+            nativeVideoPlayer.load();
+            nativeVideoPlayer.classList.add('hidden');
+
+            radioAudioPlayer.pause();
+            radioAudioPlayer.removeAttribute('src');
+            radioAudioPlayer.load();
+            audioStatusBadge.classList.add('hidden');
+
+            youtubeIframe.src = '';
+            youtubeContainer.classList.add('hidden');
+
+            radioTvEmbedIframe.src = '';
+            radioTvEmbedIframe.classList.add('hidden');
+            radioTvStage.classList.add('hidden');
+            liveStageEmptyHint.classList.add('hidden');
+
+            const liveHub = isLiveHubCard(card);
+            const candidateRef = (liveHub && (forceAutoLive || card.autoLive !== false))
+                ? (card.ytChannelRef || card.url)
+                : card.url;
+
+            if (liveHub) {
+                ambientFallback.classList.add('opacity-0');
+                radioTvStage.classList.remove('hidden');
+                setStageControlsHidden(false, false);
+                radioTvModeBadge.textContent = card.title;
+                syncHubControls(card);
+                renderCards();
+
+                const directEmbedUrl = buildYouTubeEmbedUrl(candidateRef);
+                if (directEmbedUrl) {
+                    currentActiveVideoId = extractYouTubeId(candidateRef) || '';
+                    syncBelowChat(card);
+                    radioTvEmbedIframe.src = directEmbedUrl;
+                    radioTvEmbedIframe.classList.remove('hidden');
+                    if (ytApiReady) {
+                        bindYouTubePlayerEvents(radioTvEmbedIframe, card.id);
+                    } else {
+                        pendingYtVideo = { iframeEl: radioTvEmbedIframe, cardId: card.id };
+                    }
+                    return;
+                }
+
+                liveStageEmptyHint.classList.remove('hidden');
+                const effectiveKey = getEffectiveYtApiKey(card);
+                if (!effectiveKey) {
+                    liveStageHintTitle.textContent = 'YouTube Data API Key necessária para auto-detecção';
+                    liveStageHintSubtext.textContent = 'Salve sua API Key acima para buscar a live ativa automaticamente ou clique em "Abrir no YT".';
+                    return;
+                }
+
+                liveStageHintTitle.textContent = 'Buscando transmissão ao vivo no YouTube...';
+                liveStageHintSubtext.textContent = `Consultando canal: ${candidateRef || 'não definido'}`;
+
+                try {
+                    const liveInfo = await fetchActiveLiveVideo(candidateRef, forceAutoLive, card);
+                    if (currentPlayingCard && currentPlayingCard.id === card.id) {
+                        if (liveInfo && liveInfo.videoId) {
+                            currentActiveVideoId = liveInfo.videoId;
+                            syncBelowChat(card);
+                            liveStageEmptyHint.classList.add('hidden');
+                            radioTvEmbedIframe.src = buildYouTubeEmbedUrl(liveInfo.videoId);
+                            radioTvEmbedIframe.classList.remove('hidden');
+                            if (ytApiReady) {
+                                bindYouTubePlayerEvents(radioTvEmbedIframe, card.id);
+                            } else {
+                                pendingYtVideo = { iframeEl: radioTvEmbedIframe, cardId: card.id };
+                            }
+                            if (liveInfo.title) {
+                                nowPlayingTitle.textContent = `${card.title} — ${liveInfo.title}`;
+                            }
+                        } else {
+                            liveStageHintTitle.textContent = 'Nenhuma live ativa encontrada no momento';
+                            liveStageHintSubtext.textContent = 'Avançando para o próximo card da sequência...';
+                            setTimeout(() => {
+                                if (activeCardId === card.id) {
+                                    playNextCard();
+                                }
+                            }, 1800);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Erro na YouTube Data API:', err);
+                    if (currentPlayingCard && currentPlayingCard.id === card.id) {
+                        liveStageHintTitle.textContent = 'Falha ao consultar a YouTube Data API';
+                        liveStageHintSubtext.textContent = err.message || 'Verifique a chave da API, cota diária ou o @handle / ID UC...';
+                    }
+                }
+                return;
+            }
+
+            const sourceUrl = isSafeHttpUrl(card.url) ? card.url.trim() : '';
+            if (!sourceUrl) {
+                ambientFallback.classList.remove('opacity-0');
+                renderCards();
+                return;
+            }
+
+            const ytEmbedUrl = buildYouTubeEmbedUrl(sourceUrl);
+            if (ytEmbedUrl) {
+                ambientFallback.classList.add('opacity-0');
+                youtubeContainer.classList.remove('hidden');
+                youtubeIframe.src = ytEmbedUrl;
+                if (ytApiReady) {
+                    bindYouTubePlayerEvents(youtubeIframe, card.id);
+                } else {
+                    pendingYtVideo = { iframeEl: youtubeIframe, cardId: card.id };
+                }
+            } else if (isHlsStream(sourceUrl)) {
+                ambientFallback.classList.add('opacity-0');
+                nativeVideoPlayer.classList.remove('hidden');
+                attachHlsStream(sourceUrl, nativeVideoPlayer);
+            } else if (isDirectAudioStream(sourceUrl)) {
+                ambientFallback.classList.remove('opacity-0');
+                audioStatusTitle.textContent = card.title;
+                audioStatusBadge.classList.remove('hidden');
+                radioAudioPlayer.src = sourceUrl;
+                attemptAutoplay(radioAudioPlayer, card.title);
+            } else if (isDirectVideoStream(sourceUrl)) {
+                ambientFallback.classList.add('opacity-0');
+                nativeVideoPlayer.classList.remove('hidden');
+                nativeVideoPlayer.src = sourceUrl;
+                attemptAutoplay(nativeVideoPlayer, 'reprodução');
+            } else {
+                ambientFallback.classList.remove('opacity-0');
+                showToast('Formato de URL não suportado para reprodução incorporada.');
+            }
+
+            renderCards();
+        }
+
+        openYtLoginBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const hubCard = getActiveHubCard();
+            const customRef = hubCard && typeof hubCard.ytChannelRef === 'string' ? hubCard.ytChannelRef.trim() : '';
+            let targetUrl = YOUTUBE_LOGIN_URL;
+            if (customRef) {
+                const ucMatch = customRef.match(/(UC[\w-]{10,})/i);
+                if (ucMatch) {
+                    targetUrl = `https://studio.youtube.com/channel/${ucMatch[1]}/livestreaming`;
+                }
+            }
+            window.open(targetUrl, '_blank', 'noopener,noreferrer');
+            showToast('YouTube Studio aberto em nova aba para login e transmissão ao vivo.');
+        });
+
+        triggerAutoLiveNowBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!verifyHubOwnerCredentials()) return;
+            const hubCard = getActiveHubCard();
+            if (!hubCard) return;
+            const ref = (hubCard.ytChannelRef || hubCard.url || '').trim();
+            if (!ref) {
+                ytChannelInput.focus();
+                showToast('Informe o @handle, ID UC... ou link do canal do YouTube.');
+                return;
+            }
+            hubCard.autoLive = true;
+            saveCards();
+            playCard(hubCard, true);
+        });
+
+        toggleAutoLiveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!verifyHubOwnerCredentials()) return;
+            const hubCard = getActiveHubCard();
+            if (!hubCard) return;
+            hubCard.autoLive = hubCard.autoLive === false ? true : false;
+            saveCards();
+            syncHubControls(hubCard);
+            renderCards();
+            showToast(hubCard.autoLive ? 'Auto-Live ativado.' : 'Auto-Live pausado.');
+        });
+
+        ytChannelConfigForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!verifyHubOwnerCredentials()) return;
+            const hubCard = getActiveHubCard();
+            if (!hubCard) return;
+            const rawVal = ytChannelInput.value.trim();
+            if (!rawVal) {
+                hubCard.ytChannelRef = '';
+                saveCards();
+                syncHubControls(hubCard);
+                renderCards();
+                showToast('Referência de live removida deste card.');
+                return;
+            }
+            const extUrl = buildExternalYouTubeLiveUrl(rawVal);
+            if (!isSafeHttpUrl(extUrl)) {
+                showToast('Informe um @handle, ID UC..., link watch?v=... ou URL válida do YouTube.');
+                return;
+            }
+            hubCard.ytChannelRef = rawVal;
+            hubCard.url = extUrl;
+            hubCard.autoLive = true;
+            saveCards();
+            renderCards();
+            playCard(hubCard, true);
+            showToast(`Canal salvo em ${hubCard.title}.`);
+        });
+
+        ytApiKeyForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!verifyHubOwnerCredentials()) return;
+            const keyVal = ytApiKeyInput.value.trim();
+            if (!keyVal) {
+                showToast('Digite uma chave da YouTube Data API v3.');
+                return;
+            }
+            const hubCard = getActiveHubCard();
+            if (hubCard) {
+                hubCard.ytApiKey = keyVal;
+                saveCards();
+            }
+            saveApiKey(keyVal);
+            updateApiStatusLabel(hubCard);
+            showToast('YouTube Data API Key salva.');
+            if (hubCard && currentPlayingCard && currentPlayingCard.id === hubCard.id) {
+                playCard(hubCard, true);
+            }
+        });
+
+        clearYtApiKeyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!verifyHubOwnerCredentials()) return;
+            const hubCard = getActiveHubCard();
+            if (hubCard) {
+                hubCard.ytApiKey = '';
+                saveCards();
+            }
+            ytApiKeyInput.value = '';
+            saveApiKey('');
+            updateApiStatusLabel(hubCard);
+            showToast('YouTube Data API Key removida.');
+        });
+
+        reloadLiveStreamBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentPlayingCard) {
+                showToast('Buscando transmissão ao vivo no YouTube...');
+                playCard(currentPlayingCard, true);
+            }
+        });
+
+        function requestRemoveCard(event, id) {
+            event.stopPropagation();
+            if (videoCards.length <= 1) {
+                showToast('Mantenha pelo menos 1 card no reprodutor.');
+                return;
+            }
+
+            const targetCard = videoCards.find(c => c.id === id);
+            if (!targetCard) return;
+
+            pendingRemoveCardId = id;
+            removeCardTargetLabel.textContent = `Card selecionado: "${targetCard.title}"`;
+            removeErrorMsg.classList.add('hidden');
+            removeUserInput.value = '';
+            removePassInput.value = '';
+            removeAuthModal.classList.remove('hidden');
+            setTimeout(() => removeUserInput.focus(), 50);
+        }
+
+        function closeRemoveModal() {
+            pendingRemoveCardId = null;
+            removeAuthModal.classList.add('hidden');
+        }
+
+        closeRemoveModalBtn.addEventListener('click', closeRemoveModal);
+        cancelRemoveModalBtn.addEventListener('click', closeRemoveModal);
+        removeAuthModal.addEventListener('click', (e) => {
+            if (e.target === removeAuthModal) closeRemoveModal();
+        });
+
+        removeCardForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = removeUserInput.value.trim();
+            const password = removePassInput.value;
+
+            if (!hasOwnerAccess(username, password)) {
+                removeErrorMsg.textContent = 'Usuário ou senha do dono incorretos.';
+                removeErrorMsg.classList.remove('hidden');
+                return;
+            }
+
+            const idToRemove = pendingRemoveCardId;
+            const index = videoCards.findIndex(c => c.id === idToRemove);
+            closeRemoveModal();
+
+            if (index === -1) return;
+
+            videoCards.splice(index, 1);
+            saveCards();
+
+            if (activeCardId === idToRemove) {
+                playCard(videoCards[0]);
+            } else {
+                renderCards();
+            }
+            showToast('Card removido.');
+        });
+
+        function renderCards() {
+            cardsTrack.innerHTML = '';
+
+            videoCards.forEach((card) => {
+                const isActive = card.id === activeCardId;
+                const liveHub = isLiveHubCard(card);
+                const hasAutoLive = liveHub && card.autoLive !== false && (Boolean(buildYouTubeEmbedUrl(card.ytChannelRef || card.url)) || Boolean(getEffectiveYtApiKey(card)));
+                const isGamesCard = card.theme === 'games' || card.id === 'card-3';
+                const isRadioTvCard = card.theme === 'radio-tv' || card.id === 'card-2';
+                const ytId = extractYouTubeId(card.url);
+                const isHls = isHlsStream(card.url);
+                const isRadioStream = isDirectAudioStream(card.url);
+                const thumbUrl = (!isGamesCard && !isRadioTvCard && ytId) ? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg` : null;
+                const safeTitle = escapeHtml(card.title);
+
+                let sourceLabel = 'Sinal Ambiente';
+                if (isRadioTvCard) {
+                    sourceLabel = hasAutoLive ? 'Rádio & TV • Auto-Live API' : 'Rádio & TV • Canal Ao Vivo';
+                } else if (isGamesCard) {
+                    sourceLabel = hasAutoLive ? 'Games Ao Vivo • Auto-Live API' : 'Games Ao Vivo • Canal Ao Vivo';
+                } else if (liveHub) sourceLabel = 'Ao Vivo • YouTube Live';
+                else if (ytId) sourceLabel = 'YouTube';
+                else if (isHls) sourceLabel = 'Stream Ao Vivo • HLS';
+                else if (isRadioStream) sourceLabel = 'Rádio Ao Vivo • A sua música toca aqui!';
+                else if (card.url) sourceLabel = 'Vídeo Direto';
+
+                const cardEl = document.createElement('div');
+                cardEl.className = `group relative flex-shrink-0 w-44 sm:w-52 rounded-2xl p-2 transition-all duration-200 cursor-pointer backdrop-blur-md border ${
+                    isActive
+                        ? 'bg-white/20 border-red-500 shadow-[0_0_20px_rgba(225,29,43,0.4)] scale-[1.02]'
+                        : 'bg-black/55 hover:bg-white/15 border-white/15 hover:border-white/30'
+                }`;
+
+                cardEl.onclick = () => playCard(card);
+
+                const mediaPreviewHTML = isRadioTvCard
+                    ? RADIO_TV_COVER_SVG
+                    : (isGamesCard
+                        ? BGAMES_COVER_SVG
+                        : (thumbUrl
+                            ? `<img src="${thumbUrl}" alt="${safeTitle}" onerror="this.style.display='none'" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300">`
+                            : `<div class="w-full h-full bg-gradient-to-br from-[#7f1d1d] via-[#2a1c12] to-[#0b0f17] flex items-center justify-center"><span class="text-[10px] font-extrabold tracking-widest uppercase text-red-300/90">${liveHub ? 'YOUTUBE LIVE' : (isRadioStream ? 'AO VIVO' : 'PLAYER')}</span></div>`));
+
+                cardEl.innerHTML = `
+                    <div class="relative w-full h-12 sm:h-14 rounded-xl overflow-hidden bg-black/60 mb-1.5 flex items-center justify-center">
+                        ${mediaPreviewHTML}
+                        ${isActive ? '<span class="absolute top-1 left-1 bg-[#e11d2b] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow">ATIVO</span>' : ''}
+                        <button type="button" data-remove-id="${escapeHtml(card.id)}" title="Remover card" aria-label="Remover card ${safeTitle}" class="opacity-75 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 absolute top-1 right-1 w-5 h-5 rounded-full bg-black/75 hover:bg-red-600 text-white/85 hover:text-white flex items-center justify-center transition cursor-pointer">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="px-0.5 min-w-0">
+                        <p class="text-xs font-bold text-white truncate">${safeTitle}</p>
+                        <p class="text-[10px] text-white/60 truncate">${escapeHtml(sourceLabel)}</p>
+                    </div>
+                `;
+
+                const removeBtn = cardEl.querySelector('[data-remove-id]');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', (event) => requestRemoveCard(event, card.id));
+                }
+
+                cardsTrack.appendChild(cardEl);
+            });
+        }
+
+        function openAddModal() {
+            formErrorMsg.classList.add('hidden');
+            addCardForm.reset();
+            addCardModal.classList.remove('hidden');
+            setTimeout(() => ownerUserInput.focus(), 50);
+        }
+
+        function closeAddModal() {
+            addCardModal.classList.add('hidden');
+        }
+
+        openAddModalBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAddModal();
+        });
+
+        closeAddModalBtn.addEventListener('click', closeAddModal);
+        cancelAddModalBtn.addEventListener('click', closeAddModal);
+
+        addCardModal.addEventListener('click', (e) => {
+            if (e.target === addCardModal) {
+                closeAddModal();
+            }
+        });
+
+        addCardForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const username = ownerUserInput.value.trim();
+            const password = ownerPassInput.value;
+            const title = cardTitleInput.value.trim();
+            const url = cardUrlInput.value.trim();
+
+            if (!hasOwnerAccess(username, password)) {
+                formErrorMsg.textContent = 'Acesso negado: usuário ou senha do dono inválidos.';
+                formErrorMsg.classList.remove('hidden');
+                return;
+            }
+
+            if (!title || !isSafeHttpUrl(url)) {
+                formErrorMsg.textContent = 'Preencha um título válido e uma URL iniciando com http:// ou https://.';
+                formErrorMsg.classList.remove('hidden');
+                return;
+            }
+
+            const newCard = {
+                id: 'card-' + Date.now(),
+                title,
+                url
+            };
+
+            videoCards.push(newCard);
+            saveCards();
+            closeAddModal();
+            playCard(newCard);
+            showToast('Novo card adicionado com sucesso!');
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (!addCardModal.classList.contains('hidden')) {
+                    closeAddModal();
+                } else if (!removeAuthModal.classList.contains('hidden')) {
+                    closeRemoveModal();
+                } else if (isStageControlsHidden) {
+                    setStageControlsHidden(false, false);
+                } else if (isUiHidden) {
+                    restoreInterface();
+                }
+            }
+        });
+
+        loadApiKey();
+        loadCards();
+
+        const firstCard = videoCards[0];
+        activeCardId = firstCard ? firstCard.id : 'card-1';
+        saveState();
+        renderCards();
+        playCard(firstCard);
+    </script>
+</body>
+</html>
